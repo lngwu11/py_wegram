@@ -1,0 +1,8 @@
+logfile: "./logs/wegram.log"
+loglevel: "debug"
+ntfy_url: ""
+
+service:
+  port: 8088
+  wxid: "wxid_xxxxx"
+  baseurl: "http://127.0.0.1:8058"
