@@ -94,7 +94,7 @@ class GroupMemberManager:
             # 构建payload
             payload = {
                 "QID": chatroom_id,
-                "Wxid": config.MY_WXID
+                "Wxid": config.WXID
             }
             group_member_response = await wechat_api("GROUP_MEMBER", payload)
 
@@ -150,7 +150,7 @@ class GroupMemberManager:
         if chatroom_id not in self.data:
             payload = {
                 "QID": chatroom_id,
-                "Wxid": config.MY_WXID
+                "Wxid": config.WXID
             }
             group_member_response = await wechat_api("GROUP_MEMBER", payload)
 

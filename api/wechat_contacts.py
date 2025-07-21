@@ -36,6 +36,8 @@ async def get_user_info(towxids):
         "Towxids": towxids_str
     }
 
+    # logger.debug(f"==> body: {body}")
+
     # 发送请求
     result = await wechat_api("USER_INFO", body)
 

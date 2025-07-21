@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional
 from loguru import logger
 
 import config
+import httpapi
 from config import LOCALE as locale
 from api import wechat_contacts
 from utils import message_formatter
@@ -176,7 +177,11 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
         # 获取发送者信息
         sender_name = await _get_sender_info(from_wxid, sender_wxid, contact_name)
 
-        logger.info(f"💬 类型:{locale.type(msg_type)} 来自:{from_wxid} 发送者:{sender_name}[{sender_wxid}] 内容:{content}")
+        logger.info(f"💬 类型:{locale.type(msg_type)} 来自:{contact_name}[{from_wxid}] 发送者:{sender_name}[{sender_wxid}] 内容:{content}")
+        if msg_type == 2001 and from_wxid.endswith('@chatroom'):
+            notify_msg = f"收到来自群[{contact_name}]-[{sender_name}]的红包".encode('utf-8')
+            httpapi.do_post(config.cfg.ntfy_url, notify_msg)
+            # TODO 自动抢红包
 
         # 获取群组
         chat_id = await _get_chat(from_wxid)

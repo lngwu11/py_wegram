@@ -103,7 +103,7 @@ async def process_callback_data(callback_data: Dict[str, Any]) -> Dict[str, Any]
                 logger.warning(f"⚠️ 跳过重复消息: {msg_id}")
                 continue
 
-            logger.info(f"收到消息: {msg}")
+            # logger.info(f"收到消息: {msg}")
 
             # 处理新消息
             try:
