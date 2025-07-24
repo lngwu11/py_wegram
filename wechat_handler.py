@@ -1,5 +1,7 @@
 import asyncio
+import random
 import threading
+import time
 from asyncio import Queue
 from typing import Dict, Any, Optional
 
@@ -8,7 +10,7 @@ from loguru import logger
 import config
 import httpapi
 from config import LOCALE as locale
-from api import wechat_contacts
+from api import wechat_contacts, wechat_tenpay
 from utils import message_formatter
 from utils.contact_manager import contact_manager
 from utils.group_manager import group_manager
@@ -181,7 +183,10 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
         if msg_type == 2001 and from_wxid.endswith('@chatroom'):
             notify_msg = f"收到来自群[{contact_name}]-[{sender_name}]的红包".encode('utf-8')
             httpapi.do_post(config.cfg.ntfy_url, notify_msg)
-            # TODO 自动抢红包
+            # 自动抢红包
+            time.sleep(random.randint(3, 5))
+            logger.warning("~~~~~抢hb~~~~~~~")
+            await wechat_tenpay.auto_hong_bao(from_wxid, message_info['Content'])
 
         # 获取群组
         chat_id = await _get_chat(from_wxid)

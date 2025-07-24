@@ -50,6 +50,9 @@ class WeChatAPIPaths:
     GET_EMOJI = "/Tools/EmojiDownload"
     GET_VOICE = "/Tools/DownloadVoice"
 
+    # 支付
+    AUTO_HONGBAO = "/TenPay/AutoHongBao"
+
     @classmethod
     def get_path(cls, name: str) -> Optional[str]:
         """根据名称获取路径"""
