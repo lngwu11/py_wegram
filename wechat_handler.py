@@ -10,7 +10,7 @@ from loguru import logger
 import config
 import httpapi
 from config import LOCALE as locale
-from api import wechat_contacts, wechat_tenpay
+from api import wechat_contacts, wechat_tenpay, wechat_download
 from utils import message_formatter
 from utils.contact_manager import contact_manager
 from utils.group_manager import group_manager
@@ -187,6 +187,12 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
             time.sleep(random.randint(3, 5))
             logger.warning("~~~~~抢hb~~~~~~~")
             await wechat_tenpay.auto_hong_bao(from_wxid, message_info['Content'])
+        elif msg_type == 3 and from_wxid in config.cfg.service.saveimg_wxids:
+            """处理图片消息"""
+            # 异步下载图片
+            logger.info(f"下载图片开始")
+            success, file, _ = await wechat_download.get_image(msg_id, from_wxid, content)
+            logger.info(f"下载图片结束：{success} {file}")
 
         # 获取群组
         chat_id = await _get_chat(from_wxid)
@@ -206,8 +212,7 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
         # 调试输出未知类型消息
         types_keys = [k for k in locale.type_map.keys()]
         if msg_type not in types_keys:
-            logger.info(f"💬 类型: {msg_type}, 来自: {from_wxid}, 发送者: {sender_wxid}")
-            logger.info(f"💬 内容: {content}")
+            logger.warning(f"💬 类型:{msg_type} 来自:{from_wxid} 发送者:{sender_wxid} 内容:{content}")
 
     except Exception as e:
         logger.error(f"异步消息处理失败: {e}", exc_info=True)

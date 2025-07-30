@@ -1,5 +1,6 @@
 import os
 import sys
+from typing import List
 
 import requests
 import yaml
@@ -14,6 +15,7 @@ class Service(BaseModel):
     port: int
     wxid: str
     baseurl: str
+    saveimg_wxids: List[str]
 
 
 class Config(BaseModel):
