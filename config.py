@@ -89,5 +89,5 @@ WXID = cfg.service.wxid
 BASE_URL = cfg.service.baseurl
 
 # 语言
-LANG = os.getenv("LANG", "zh")
-LOCALE = Locale(LANG)
+# LANG = os.getenv("LANG", "zh")
+LOCALE = Locale("zh")
