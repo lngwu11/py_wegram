@@ -1,8 +1,10 @@
 import asyncio
+import os.path
 import random
 import threading
 import time
 from asyncio import Queue
+from os import path
 from typing import Dict, Any, Optional
 
 from loguru import logger
@@ -11,7 +13,7 @@ import config
 import httpapi
 from config import LOCALE as locale
 from api import wechat_contacts, wechat_tenpay, wechat_download
-from utils import message_formatter
+from utils import message_formatter, caichengyu, call_wechat_api
 from utils.contact_manager import contact_manager
 from utils.group_manager import group_manager
 
@@ -175,11 +177,11 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
         # ========== 获取联系人和发送者信息 ==========
         # 获取联系人信息
         contact_name, avatar_url = await _get_contact_info(from_wxid, content, push_content)
-
         # 获取发送者信息
         sender_name = await _get_sender_info(from_wxid, sender_wxid, contact_name)
 
         logger.info(f"💬 类型:{locale.type(msg_type)} 来自:{contact_name}[{from_wxid}] 发送者:{sender_name}[{sender_wxid}] 内容:{content}")
+
         if msg_type == 2001 and from_wxid.endswith('@chatroom'):
             notify_msg = f"收到来自群[{contact_name}]-[{sender_name}]的红包".encode('utf-8')
             httpapi.do_post(config.cfg.ntfy_url, notify_msg)
@@ -187,12 +189,46 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
             time.sleep(random.randint(3, 5))
             logger.warning("~~~~~抢hb~~~~~~~")
             await wechat_tenpay.auto_hong_bao(from_wxid, message_info['Content'])
-        elif msg_type == 3 and from_wxid in config.cfg.service.saveimg_wxids:
+
+        elif msg_type == 1 and sender_wxid in config.cfg.service.saveimg_wxids:
+            """处理文本消息"""
+            if caichengyu.in_time_range("18:00:00", "18:01:30"):
+
+                logger.debug(f"{caichengyu.save_file}")
+
+                if caichengyu.save_file:
+                    answer = caichengyu.get_answer(content)
+                    logger.debug(f"过滤答案：{answer}")
+                    parent_path = path.dirname(caichengyu.save_file)
+                    save_path = path.join(parent_path, answer + ".png")
+                    if path.exists(save_path):
+                        save_path = path.join(parent_path, answer + str(random.randint(1, 100)) + ".png")
+
+                    logger.debug(f"重命名文件：{save_path}")
+                    os.rename(caichengyu.save_file, save_path)
+                    caichengyu.save_file = None
+
+        elif msg_type == 3 and sender_wxid in config.cfg.service.saveimg_wxids:
             """处理图片消息"""
-            # 异步下载图片
-            logger.info(f"下载图片开始")
-            success, file, _ = await wechat_download.get_image(msg_id, from_wxid, content)
-            logger.info(f"下载图片结束：{success} {file}")
+            if caichengyu.in_time_range("17:59:55", "18:00:30"):
+                msg_img_md5 = content['msg']['img']['md5']
+                logger.debug(f"获取到md5值：{msg_img_md5}")
+
+                if msg_img_md5 in caichengyu.image_md5s:
+                    value = caichengyu.image_md5s[msg_img_md5]
+                    logger.debug(f"获取到值：{value}")
+
+                    if value:
+                        # 延时6秒发送文本消息
+                        time.sleep(6)
+                        await call_wechat_api.send_text(from_wxid, value)
+
+                else:
+                    # 异步下载图片
+                    logger.info(f"下载图片开始")
+                    success, file, _ = await wechat_download.get_image(msg_id, from_wxid, content)
+                    logger.info(f"下载图片结束：{success} {file}")
+                    caichengyu.save_file = file
 
         # 获取群组
         chat_id = await _get_chat(from_wxid)

@@ -196,3 +196,15 @@ def wechat_api_sync(
     except Exception as e:
         logger.error(f"调用微信API时出错 [{api_path}]: {e}")
         return False
+
+
+async def _send_telegram_text(to_wxid: str, text: str) -> bool:
+    """发送文本消息到微信"""
+    payload = {
+        "At": "",
+        "Content": text,
+        "ToWxid": to_wxid,
+        "Type": 1,
+        "Wxid": config.MY_WXID
+    }
+    return await wechat_api("SEND_TEXT", payload)
