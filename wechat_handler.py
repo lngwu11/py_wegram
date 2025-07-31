@@ -225,13 +225,14 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
                     if value:
                         # 延时6秒发送文本消息
                         time.sleep(6)
+                        logger.info(f"发送：{value}")
                         await call_wechat_api.send_text(from_wxid, value)
 
                 else:
                     # 异步下载图片
                     logger.info(f"下载图片开始")
                     success, file, _ = await wechat_download.get_image(msg_id, from_wxid, content)
-                    logger.info(f"下载图片结束：{success} {file}")
+                    logger.info(f"下载图片结束：{success} 路径：{file}")
                     caichengyu.save_file = file
 
         # 获取群组
