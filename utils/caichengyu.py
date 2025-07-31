@@ -4,6 +4,8 @@ import re
 import time
 from typing import Dict
 
+from loguru import logger
+
 save_file = ''
 
 
@@ -61,12 +63,12 @@ def collect_image_md5s(directory: str, image_extensions: tuple = ('.jpg', '.jpeg
                     # 检查是否已存在该MD5值
                     if file_md5 not in md5_dict:
                         md5_dict[file_md5] = chinese_name
-                        print(f"已处理 {file_path}: {file_md5} -> {chinese_name}")
+                        logger.info(f"已处理 {file_path}: {file_md5} -> {chinese_name}")
                     else:
-                        print(f"跳过重复文件: {file_path}")
+                        logger.warning(f"跳过重复文件: {file_path}")
 
                 except Exception as e:
-                    print(f"处理文件 {file_path} 时出错: {str(e)}")
+                    logger.error(f"处理文件 {file_path} 时出错: {str(e)}")
 
     return md5_dict
 
@@ -75,14 +77,14 @@ def in_time_range(start: str, end: str):
     return start <= time.strftime("%H:%M:%S", time.localtime()) <= end
 
 
-def get_answer(content: str):
+def get_answer(content: str) -> str:
     # 匹配【答案】后的内容（非贪婪模式）
     match = re.search(r'【答案】(.*?)\n', content)
     if match:
         answer = match.group(1).strip()
         return answer
 
-    return None
+    return ''
 
 
 image_md5s = {}
@@ -91,6 +93,7 @@ image_md5s = {}
 def init(images_path: str):
     global image_md5s
     image_md5s = collect_image_md5s(images_path)
+    logger.debug(f"成语总数：{len(image_md5s)}")
 
 
 if __name__ == '__main__':

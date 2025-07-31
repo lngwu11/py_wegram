@@ -199,14 +199,18 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
                 if caichengyu.save_file:
                     answer = caichengyu.get_answer(content)
                     logger.debug(f"过滤答案：{answer}")
-                    parent_path = path.dirname(caichengyu.save_file)
-                    save_path = path.join(parent_path, answer + ".png")
-                    if path.exists(save_path):
-                        save_path = path.join(parent_path, answer + str(random.randint(1, 100)) + ".png")
 
-                    logger.debug(f"重命名文件：{save_path}")
-                    os.rename(caichengyu.save_file, save_path)
-                    caichengyu.save_file = None
+                    if answer:
+                        parent_path = os.path.dirname(caichengyu.save_file)
+                        save_path = os.path.join(parent_path, answer + ".png")
+                        if os.path.exists(save_path):
+                            save_path = os.path.join(parent_path, answer + str(random.randint(1, 100)) + ".png")
+
+                        logger.debug(f"重命名文件：{save_path}")
+                        os.rename(caichengyu.save_file, save_path)
+                        caichengyu.save_file = None
+                        caichengyu.image_md5s[caichengyu.get_file_md5(save_path)] = answer
+                        logger.debug(f"成语总数：{len(caichengyu.image_md5s)}")
 
         elif msg_type == 3 and sender_wxid in config.cfg.service.saveimg_wxids:
             """处理图片消息"""
