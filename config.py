@@ -19,6 +19,7 @@ class Service(BaseModel):
     wxid: str
     baseurl: str
     saveimg_wxids: List[str]
+    ccy_weekdays: List[int]
 
 
 class Config(BaseModel):

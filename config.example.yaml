@@ -8,3 +8,7 @@ service:
   baseurl: "http://127.0.0.1:8058/api"
   saveimg_wxids:
     - "49204342740@chatroom"
+  ccy_weekdays:
+    - 1
+    - 2
+    - 4

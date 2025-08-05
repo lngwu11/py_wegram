@@ -196,7 +196,7 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
 
             # Monday is 0 and Friday is 4
             weekday = datetime.datetime.today().weekday()
-            if caichengyu.in_time_range("18:00:00", "18:01:30") and (weekday == 1 or weekday == 2 or weekday == 4):
+            if caichengyu.in_time_range("18:00:00", "18:01:30") and weekday in config.cfg.service.ccy_weekdays:
 
                 logger.debug(f"{caichengyu.save_file}")
 
@@ -220,7 +220,7 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
             """处理图片消息"""
             # Monday is 0 and Friday is 4
             weekday = datetime.datetime.today().weekday()
-            if caichengyu.in_time_range("17:59:55", "18:00:30") and (weekday == 1 or weekday == 2 or weekday == 4):
+            if caichengyu.in_time_range("17:59:55", "18:00:30") and weekday in config.cfg.service.ccy_weekdays:
                 msg_img_md5 = content['msg']['img']['md5']
                 logger.debug(f"获取到md5值：{msg_img_md5}")
 
