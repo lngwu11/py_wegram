@@ -9,6 +9,9 @@ from pydantic import BaseModel
 from requests import RequestException
 
 from utils.locales import Locale
+import time
+import threading
+from typing import Callable
 
 
 class Service(BaseModel):
@@ -34,6 +37,50 @@ def load_config(file_path: str) -> Config:
 
 # 加载配置文件
 cfg = load_config('config.yaml')
+
+
+def reload_config():
+    global cfg
+    cfg = load_config('config.yaml')
+    logger.info(f"Reload config: {cfg}")
+
+
+class ConfigWatcher:
+    def __init__(self, config_path: str, reload_callback: Callable, interval: float = 3.0):
+        self.config_path = os.path.abspath(config_path)  # 配置文件绝对路径
+        self.reload_callback = reload_callback  # 配置文件更新后的回调函数
+        self.interval = interval  # 检查间隔（秒）
+        self.last_mtime = self._get_mtime()  # 初始修改时间
+        self._stop_event = threading.Event()  # 停止信号
+        self._thread = threading.Thread(target=self._watch, daemon=True)  # 后台线程
+
+    def _get_mtime(self) -> float:
+        """获取文件的最后修改时间"""
+        return os.path.getmtime(self.config_path)
+
+    def _watch(self):
+        """后台线程：持续检查文件是否被修改"""
+        while not self._stop_event.is_set():
+            try:
+                current_mtime = self._get_mtime()
+                if current_mtime != self.last_mtime:  # 文件被修改
+                    logger.info(f"[ConfigWatcher] 检测到配置文件修改: {self.config_path}")
+                    self.last_mtime = current_mtime
+                    self.reload_callback()  # 调用回调函数重新加载配置
+            except Exception as e:
+                logger.error(f"[ConfigWatcher] 错误: {e}")
+            time.sleep(self.interval)
+
+    def start(self):
+        """启动监听线程"""
+        self._thread.start()
+        logger.info(f"[ConfigWatcher] 开始监听配置文件: {self.config_path}")
+
+    def stop(self):
+        """停止监听线程"""
+        self._stop_event.set()
+        self._thread.join()
+        logger.info("[ConfigWatcher] 已停止监听")
 
 
 class Notifier:
@@ -84,6 +131,10 @@ def init_logger(logfile=cfg.logfile, level=cfg.loglevel.upper(), ntfy_url=cfg.nt
 
 init_logger()
 logger.info(f"Config: {cfg}")
+
+# 创建并启动监听器
+watcher = ConfigWatcher("config.yaml", reload_callback=reload_config)
+watcher.start()
 
 # 配置
 PORT = cfg.service.port

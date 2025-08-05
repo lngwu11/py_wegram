@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import os.path
 import random
 import threading
@@ -192,7 +193,10 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
 
         elif msg_type == 1 and sender_wxid in config.cfg.service.saveimg_wxids:
             """处理文本消息"""
-            if caichengyu.in_time_range("18:00:00", "18:01:30"):
+
+            # Monday is 0 and Friday is 4
+            weekday = datetime.datetime.today().weekday()
+            if caichengyu.in_time_range("18:00:00", "18:01:30") and (weekday == 1 or weekday == 2 or weekday == 4):
 
                 logger.debug(f"{caichengyu.save_file}")
 
@@ -214,7 +218,9 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
 
         elif msg_type == 3 and sender_wxid in config.cfg.service.saveimg_wxids:
             """处理图片消息"""
-            if caichengyu.in_time_range("17:59:55", "18:00:30"):
+            # Monday is 0 and Friday is 4
+            weekday = datetime.datetime.today().weekday()
+            if caichengyu.in_time_range("17:59:55", "18:00:30") and (weekday == 1 or weekday == 2 or weekday == 4):
                 msg_img_md5 = content['msg']['img']['md5']
                 logger.debug(f"获取到md5值：{msg_img_md5}")
 
@@ -223,8 +229,8 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
                     logger.debug(f"获取到值：{value}")
 
                     if value:
-                        # 延时6秒发送文本消息
-                        time.sleep(6)
+                        # 延时1秒发送文本消息
+                        time.sleep(1)
                         logger.info(f"发送：{value}")
                         await call_wechat_api.send_text(from_wxid, value)
 

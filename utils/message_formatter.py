@@ -3,6 +3,8 @@ import re
 import xml.etree.ElementTree as ET
 from types import SimpleNamespace
 
+from loguru import logger
+
 
 # 解析XML内容
 def xml_to_json(xml_string, as_string=False):
@@ -57,7 +59,7 @@ def xml_to_json(xml_string, as_string=False):
             return json_data
 
     except Exception as e:
-        print(f"解析 XML 时出错: {e}")
+        logger.error(f"解析 XML 时出错: {e}")
         return None
 
 
@@ -134,7 +136,7 @@ def xml_to_obj(xml_string):
         return obj
 
     except Exception as e:
-        print(f"解析 XML 时出错: {e}")
+        logger.error(f"解析 XML 时出错: {e}")
         return None
 
 
@@ -209,7 +211,7 @@ def extract_url_items(json_dict):
                 result += format_item(title, url, summary)
 
     except Exception as e:
-        print(f"提取标题和URL时出错: {e}")
+        logger.error(f"提取标题和URL时出错: {e}")
 
     return result, main_cover_url
 
@@ -240,7 +242,7 @@ def extract_line_content(template_detail):
                 if line_texts:
                     summary = "\n".join(line_texts)
     except Exception as e:
-        print(f"提取line_content时出错: {e}")
+        logger.error(f"提取line_content时出错: {e}")
 
     return summary
 

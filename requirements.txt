@@ -1,6 +1,6 @@
 # pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple/
 pyyaml==6.0.1
 loguru==0.7.2
-requests==2.31.0
+requests==2.32.4
 pydantic
 aiohttp
