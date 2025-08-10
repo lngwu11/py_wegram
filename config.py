@@ -18,8 +18,13 @@ class Service(BaseModel):
     port: int
     wxid: str
     baseurl: str
+
+
+class CaiChengYu(BaseModel):
     saveimg_wxids: List[str]
-    ccy_weekdays: List[int]
+    img_time_range: List[str]
+    text_time_range: List[str]
+    weekdays: List[int]
 
 
 class Config(BaseModel):
@@ -28,6 +33,7 @@ class Config(BaseModel):
     ntfy_url: str
 
     service: Service
+    ccy: CaiChengYu
 
 
 def load_config(file_path: str) -> Config:

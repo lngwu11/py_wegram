@@ -191,55 +191,19 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
             logger.warning("~~~~~抢hb~~~~~~~")
             await wechat_tenpay.auto_hong_bao(from_wxid, message_info['Content'])
 
-        elif msg_type == 1 and sender_wxid in config.cfg.service.saveimg_wxids:
+        elif msg_type == 1:
             """处理文本消息"""
 
-            # Monday is 0 and Friday is 4
-            weekday = datetime.datetime.today().weekday()
-            if caichengyu.in_time_range("18:00:00", "18:01:30") and weekday in config.cfg.service.ccy_weekdays:
+            # 处理成语
+            if sender_wxid in config.cfg.ccy.saveimg_wxids:
+                caichengyu.handle_text(content)
 
-                logger.debug(f"{caichengyu.save_file}")
-
-                if caichengyu.save_file:
-                    answer = caichengyu.get_answer(content)
-                    logger.debug(f"过滤答案：{answer}")
-
-                    if answer:
-                        parent_path = os.path.dirname(caichengyu.save_file)
-                        save_path = os.path.join(parent_path, answer + ".png")
-                        if os.path.exists(save_path):
-                            save_path = os.path.join(parent_path, answer + str(random.randint(1, 100)) + ".png")
-
-                        logger.debug(f"重命名文件：{save_path}")
-                        os.rename(caichengyu.save_file, save_path)
-                        caichengyu.save_file = None
-                        caichengyu.image_md5s[caichengyu.get_file_md5(save_path)] = answer
-                        logger.debug(f"成语总数：{len(caichengyu.image_md5s)}")
-
-        elif msg_type == 3 and sender_wxid in config.cfg.service.saveimg_wxids:
+        elif msg_type == 3:
             """处理图片消息"""
-            # Monday is 0 and Friday is 4
-            weekday = datetime.datetime.today().weekday()
-            if caichengyu.in_time_range("17:59:55", "18:00:30") and weekday in config.cfg.service.ccy_weekdays:
-                msg_img_md5 = content['msg']['img']['md5']
-                logger.debug(f"获取到md5值：{msg_img_md5}")
 
-                if msg_img_md5 in caichengyu.image_md5s:
-                    value = caichengyu.image_md5s[msg_img_md5]
-                    logger.debug(f"获取到值：{value}")
-
-                    if value:
-                        # 延时1秒发送文本消息
-                        time.sleep(1)
-                        logger.info(f"发送：{value}")
-                        await call_wechat_api.send_text(from_wxid, value)
-
-                else:
-                    # 异步下载图片
-                    logger.info(f"下载图片开始")
-                    success, file, _ = await wechat_download.get_image(msg_id, from_wxid, content)
-                    logger.info(f"下载图片结束：{success} 路径：{file}")
-                    caichengyu.save_file = file
+            # 处理成语
+            if sender_wxid in config.cfg.ccy.saveimg_wxids:
+                await caichengyu.handle_image(msg_id, from_wxid, content)
 
         # 获取群组
         chat_id = await _get_chat(from_wxid)

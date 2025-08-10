@@ -1,10 +1,16 @@
+import datetime
 import hashlib
 import os
+import random
 import re
 import time
 from typing import Dict
 
 from loguru import logger
+
+from api import wechat_download
+from utils import call_wechat_api
+from config import cfg
 
 save_file = ''
 
@@ -85,6 +91,60 @@ def get_answer(content: str) -> str:
         return answer
 
     return ''
+
+
+def handle_text(content: str):
+    global save_file
+
+    if not save_file or not in_time_range(cfg.ccy.text_time_range[0], cfg.ccy.text_time_range[1]):
+        return
+
+    answer = get_answer(content)
+    logger.debug(f"过滤答案：{answer}")
+    if answer:
+        parent_path = os.path.dirname(save_file)
+        save_path = os.path.join(parent_path, answer + ".png")
+        if os.path.exists(save_path):
+            save_path = os.path.join(parent_path, answer + str(random.randint(1, 100)) + ".png")
+
+        logger.debug(f"重命名文件：{save_path}")
+        os.rename(save_file, save_path)
+        save_file = None
+        image_md5s[get_file_md5(save_path)] = answer
+        logger.debug(f"成语总数：{len(image_md5s)}")
+
+
+async def handle_image(msg_id, from_wxid, content):
+    global save_file
+
+    if not in_time_range(cfg.ccy.img_time_range[0], cfg.ccy.img_time_range[1]):
+        return
+
+    msg_img_md5 = content['msg']['img']['md5']
+    logger.debug(f"获取到md5值：{msg_img_md5}")
+    if msg_img_md5 in image_md5s:
+        value = image_md5s[msg_img_md5]
+        logger.debug(f"获取到值：{value}")
+
+        if not value:
+            # 删除key
+            del image_md5s[msg_img_md5]
+            return
+
+        # Monday is 0 and Friday is 4
+        weekday = datetime.datetime.today().weekday()
+        if weekday in cfg.ccy.weekdays:
+            # 延时1秒发送文本消息
+            time.sleep(1)
+            logger.info(f"发送文本：{value}")
+            await call_wechat_api.send_text(from_wxid, value)
+
+    else:
+        # 异步下载图片
+        logger.info(f"下载图片开始")
+        success, file, _ = await wechat_download.get_image(msg_id, from_wxid, content)
+        logger.info(f"下载图片结束：{success} 路径：{file}")
+        save_file = file
 
 
 image_md5s = {}
