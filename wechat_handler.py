@@ -147,9 +147,11 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
         else:
             sender_wxid = from_wxid
 
+        # logger.info(f"from_wxid: {from_wxid} to_wxid: {to_wxid}")
+
         # 转发自己的消息
-        if from_wxid == config.WXID:
-            from_wxid = to_wxid
+        # if from_wxid == config.WXID:
+        #     from_wxid = to_wxid
 
         # ========== 特殊消息类型处理 ==========
         # 微信上打开联系人对话
