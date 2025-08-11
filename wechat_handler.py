@@ -1,20 +1,18 @@
 import asyncio
-import datetime
-import os.path
 import random
 import threading
 import time
+import traceback
 from asyncio import Queue
-from os import path
 from typing import Dict, Any, Optional
 
 from loguru import logger
 
 import config
 import httpapi
+from api import wechat_contacts, wechat_tenpay
 from config import LOCALE as locale
-from api import wechat_contacts, wechat_tenpay, wechat_download
-from utils import message_formatter, caichengyu, call_wechat_api
+from utils import message_formatter, caichengyu
 from utils.contact_manager import contact_manager
 from utils.group_manager import group_manager
 
@@ -227,6 +225,7 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
 
     except Exception as e:
         logger.error(f"异步消息处理失败: {e}", exc_info=True)
+        traceback.print_exc()  # 打印完整堆栈信息
 
 
 class MessageProcessor:
