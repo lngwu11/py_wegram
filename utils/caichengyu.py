@@ -133,9 +133,10 @@ async def handle_image(msg_id, from_wxid, content):
 
         # Monday is 0 and Friday is 4
         weekday = datetime.datetime.today().weekday()
+        logger.debug(f"weekday={weekday} weekdays={cfg.ccy.weekdays}")
         if weekday in cfg.ccy.weekdays:
-            # 延时1秒发送文本消息
-            time.sleep(1)
+            # 延时3秒发送文本消息
+            time.sleep(3)
             logger.info(f"发送文本：{value}")
             await call_wechat_api.send_text(from_wxid, value)
 
