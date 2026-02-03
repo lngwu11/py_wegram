@@ -8,6 +8,7 @@ service:
   baseurl: "http://127.0.0.1:8058/api"
 
 ccy:
+  enable: false
   saveimg_wxids:
     - "wxid_2sgby07xtcun22"
   img_time_range: [ '17:59:55','18:00:30' ]

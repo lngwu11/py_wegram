@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import random
 import threading
 import time
@@ -12,7 +13,7 @@ import config
 import httpapi
 from api import wechat_contacts, wechat_tenpay
 from config import LOCALE as locale
-from utils import message_formatter, caichengyu
+from utils import message_formatter, caichengyu, call_wechat_api, filehelper
 from utils.contact_manager import contact_manager
 from utils.group_manager import group_manager
 
@@ -181,7 +182,9 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
         # 获取发送者信息
         sender_name = await _get_sender_info(from_wxid, sender_wxid, contact_name)
 
-        logger.info(f"💬 类型:{locale.type(msg_type)} 来自:{contact_name}[{from_wxid}] 发送者:{sender_name}[{sender_wxid}] 内容:{content}")
+        # 消息时间
+        msg_time = datetime.datetime.fromtimestamp(int(create_time)).strftime("%Y-%m-%d %H:%M:%S")
+        logger.info(f"💬 类型:{locale.type(msg_type)} 时间:{msg_time} 来自:{contact_name}[{from_wxid}] 发送者:{sender_name}[{sender_wxid}] 内容:{content}")
 
         if msg_type == 2001 and from_wxid.endswith('@chatroom'):
             notify_msg = f"收到来自群[{contact_name}]-[{sender_name}]的红包".encode('utf-8')
@@ -194,15 +197,18 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
         elif msg_type == 1:
             """处理文本消息"""
 
+            if to_wxid == "filehelper" and content.startswith('/'):
+                await filehelper.handle_cmd(content, to_wxid)
+
             # 处理成语
-            if sender_wxid in config.cfg.ccy.saveimg_wxids:
+            if config.cfg.ccy.enable and sender_wxid in config.cfg.ccy.saveimg_wxids:
                 caichengyu.handle_text(content)
 
         elif msg_type == 3:
             """处理图片消息"""
 
             # 处理成语
-            if sender_wxid in config.cfg.ccy.saveimg_wxids:
+            if config.cfg.ccy.enable and sender_wxid in config.cfg.ccy.saveimg_wxids:
                 await caichengyu.handle_image(msg_id, from_wxid, content)
 
         # 获取群组

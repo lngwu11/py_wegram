@@ -21,6 +21,7 @@ class Service(BaseModel):
 
 
 class CaiChengYu(BaseModel):
+    enable: bool
     saveimg_wxids: List[str]
     img_time_range: List[str]
     text_time_range: List[str]
