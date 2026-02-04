@@ -6,7 +6,6 @@ from loguru import logger
 import config
 from utils import call_wechat_api
 
-
 # {
 #   "Code": 0,
 #   "Success": true,
@@ -18,6 +17,13 @@ from utils import call_wechat_api
 #   "Data62": "",
 #   "Debug": ""
 # }
+
+help_text = '''--------------------
+/check: 检查状态(待支持)
+/status: 获取最后一条心跳日志
+/auto_heart_beat: 开启自动心跳
+/help: 使用帮助
+--------------------'''
 
 
 async def handle_cmd(content, to_wxid):
@@ -39,10 +45,7 @@ async def handle_cmd(content, to_wxid):
             await call_wechat_api.send_text(to_wxid, data[0])
 
     elif content == "/help":
-        help_text = '''
-        /status: 获取最后一条心跳日志
-        /auto_heart_beat: 开启自动心跳
-        '''
+        logger.info(" --- 获取帮助 ---")
         await call_wechat_api.send_text(to_wxid, help_text)
 
 

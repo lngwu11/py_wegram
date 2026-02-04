@@ -182,9 +182,11 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
         # 获取发送者信息
         sender_name = await _get_sender_info(from_wxid, sender_wxid, contact_name)
 
-        # 消息时间
-        msg_time = datetime.datetime.fromtimestamp(int(create_time)).strftime("%Y-%m-%d %H:%M:%S")
-        logger.info(f"💬 类型:{locale.type(msg_type)} 时间:{msg_time} 来自:{contact_name}[{from_wxid}] 发送者:{sender_name}[{sender_wxid}] 内容:{content}")
+        # 打印日志过滤掉公众号链接信息
+        if not (locale.type(msg_type) == "链接" and from_wxid.startswith('gh_')):
+            # 消息时间
+            msg_time = datetime.datetime.fromtimestamp(int(create_time)).strftime("%Y-%m-%d %H:%M:%S")
+            logger.info(f"💬 类型:{locale.type(msg_type)} 时间:{msg_time} 来自:{contact_name}[{from_wxid}] 发送者:{sender_name}[{sender_wxid}] 内容:{content}")
 
         if msg_type == 2001 and from_wxid.endswith('@chatroom'):
             notify_msg = f"收到来自群[{contact_name}]-[{sender_name}]的红包".encode('utf-8')

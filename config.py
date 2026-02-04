@@ -131,7 +131,7 @@ def init_logger(logfile=cfg.logfile, level=cfg.loglevel.upper(), ntfy_url=cfg.nt
     # logger.add(sys.stdout, format=logger_format, level=level)
     # logger.add(log_file_path, format=logger_format, level=level, rotation="00:00", compression="zip", retention="1 month")
     logger.add(sys.stdout, level=level, enqueue=True)
-    logger.add(log_file_path, level=level, enqueue=True, rotation="00:00", retention="10 days", encoding='utf8')
+    logger.add(log_file_path, level=level, enqueue=True, rotation="00:00", retention="30 days", encoding='utf8')
 
     # 输出到 ntfy
     logger.add(Notifier(ntfy_url), enqueue=True)
