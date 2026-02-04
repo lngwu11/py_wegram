@@ -8,6 +8,7 @@ from typing import Dict
 
 from loguru import logger
 
+import config
 from api import wechat_download
 from utils import call_wechat_api
 from config import cfg
@@ -152,6 +153,9 @@ image_md5s = {}
 
 
 def init(images_path: str):
+    if not config.cfg.ccy.enable:
+        return
+
     global image_md5s
     image_md5s = collect_image_md5s(images_path)
     logger.debug(f"成语总数：{len(image_md5s)}")

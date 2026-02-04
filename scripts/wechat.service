@@ -1,18 +1,18 @@
 [Unit]
-Description=start-wechat
+Description=the wechat service
 # 脚本在网络服务启动后执行（可选，按需调整）
-After=network.target  		
+After=network.target
 
 [Service]
 # 执行脚本的用户（如 root 或普通用户）
-User=root        		
+User=root
 # 脚本工作目录（可选）
-WorkingDirectory=/root  	
+WorkingDirectory=/root
 # 脚本绝对路径
-ExecStart=/root/start_wechat.sh 
+ExecStart=/root/start_wechat.sh
 # 脚本退出后是否重启（可选：always/on-failure/no）
-Restart=no           		
+Restart=no
 
 [Install]
 # 多用户模式下启动（默认运行级别）
-WantedBy=multi-user.target  	
+WantedBy=multi-user.target
