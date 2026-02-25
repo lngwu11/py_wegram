@@ -28,6 +28,10 @@ class CaiChengYu(BaseModel):
     weekdays: List[int]
 
 
+class QiangHongBao(BaseModel):
+    blacklist: List[str]
+
+
 class Config(BaseModel):
     logfile: str
     loglevel: str
@@ -35,6 +39,7 @@ class Config(BaseModel):
 
     service: Service
     ccy: CaiChengYu
+    qhb: QiangHongBao
 
 
 def load_config(file_path: str) -> Config:

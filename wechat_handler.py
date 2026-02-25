@@ -189,12 +189,15 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
             logger.info(f"💬 类型:{locale.type(msg_type)} 时间:{msg_time} 来自:{contact_name}[{from_wxid}] 发送者:{sender_name}[{sender_wxid}] 内容:{content}")
 
         if msg_type == 2001 and from_wxid.endswith('@chatroom'):
-            notify_msg = f"收到来自群[{contact_name}]-[{sender_name}]的红包".encode('utf-8')
-            httpapi.do_post(config.cfg.ntfy_url, notify_msg)
-            # 自动抢红包
-            time.sleep(random.randint(3, 5))
-            logger.warning("~~~~~抢hb~~~~~~~")
-            await wechat_tenpay.auto_hong_bao(from_wxid, message_info['Content'])
+
+            # 过滤不抢的群
+            if all(name not in contact_name for name in config.cfg.qhb.blacklist):
+                notify_msg = f"收到来自群[{contact_name}]-[{sender_name}]的红包".encode('utf-8')
+                httpapi.do_post(config.cfg.ntfy_url, notify_msg)
+                # 自动抢红包
+                time.sleep(random.randint(1, 5))
+                logger.warning("~~~~~抢hb~~~~~~~")
+                await wechat_tenpay.auto_hong_bao(from_wxid, message_info['Content'])
 
         elif msg_type == 1:
             """处理文本消息"""
