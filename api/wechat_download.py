@@ -23,6 +23,20 @@ async def get_image(msg_id: str, from_wxid: str, data_json) -> Tuple[bool, str, 
     )
 
 
+async def get_video(msg_id: str, from_wxid: str, data_json) -> Tuple[bool, str, str]:
+    from config import cfg
+    return await chunked_download(
+        api_path="GET_VIDEO",
+        msg_id=msg_id,
+        from_wxid=from_wxid,
+        data_json=data_json,
+        file_key="videomsg",
+        file_extension="mp4",
+        save_dir="chat_videos",
+        max_bytes=cfg.media.max_video_bytes,
+    )
+
+
 async def get_file(msg_id: str, from_wxid: str, data_json) -> Tuple[bool, str, str]:
     return await chunked_download(
         api_path="GET_FILE",
@@ -36,7 +50,7 @@ async def get_file(msg_id: str, from_wxid: str, data_json) -> Tuple[bool, str, s
 
 
 # 分段下载函数
-async def chunked_download(api_path: str, msg_id: str, from_wxid: str, data_json: dict, file_key: str, file_extension: str, save_dir: str = None) -> Tuple[bool, str, str]:
+async def chunked_download(api_path: str, msg_id: str, from_wxid: str, data_json: dict, file_key: str, file_extension: str, save_dir: str = None, max_bytes: int = None) -> Tuple[bool, str, str]:
     try:
         # 提取文件信息
         file_info = data_json["msg"][file_key]
@@ -46,6 +60,9 @@ async def chunked_download(api_path: str, msg_id: str, from_wxid: str, data_json
             now = datetime.datetime.now()
             md5 = now.strftime("%Y%m%d%H%M%S")
         data_length = int(file_info.get("length") or file_info.get("appattach").get("totallen"))
+        if max_bytes and data_length > max_bytes:
+            logger.warning(f"跳过下载，大小 {data_length} 超过限制 {max_bytes}")
+            return False, f"超过大小限制 {data_length}>{max_bytes}", ""
         file_title = (file_info.get("title") or "")
 
         # 文件名和路径
@@ -96,6 +113,9 @@ async def chunked_download(api_path: str, msg_id: str, from_wxid: str, data_json
                             cdn_base64 = cdn_base64.split(',', 1)[1]
                         # 解码base64为二进制数据
                         cdn_binary_data = base64.b64decode(cdn_base64)
+                        if max_bytes and len(cdn_binary_data) > max_bytes:
+                            logger.warning(f"跳过下载，CDN 数据 {len(cdn_binary_data)} 超过限制 {max_bytes}")
+                            return False, f"超过大小限制 {len(cdn_binary_data)}>{max_bytes}", ""
                         all_binary_data.extend(cdn_binary_data)
                         cdn_success = True
             except Exception as e:
@@ -148,6 +168,9 @@ async def chunked_download(api_path: str, msg_id: str, from_wxid: str, data_json
 
                 # 解析响应JSON
                 try:
+                    if not isinstance(response_data, dict):
+                        logger.error("下载接口无响应")
+                        return False, "下载接口无响应", ""
                     if 'Data' in response_data and 'data' in response_data['Data'] and 'buffer' in response_data['Data']['data']:
                         # 获取base64字符串
                         base64_data = response_data['Data']['data']['buffer']
@@ -160,6 +183,9 @@ async def chunked_download(api_path: str, msg_id: str, from_wxid: str, data_json
                         binary_chunk = base64.b64decode(base64_data)
 
                         # 添加到总数据中
+                        if max_bytes and len(all_binary_data) + len(binary_chunk) > max_bytes:
+                            logger.warning(f"下载中止，已超过限制 {max_bytes}")
+                            return False, f"超过大小限制 {max_bytes}", ""
                         all_binary_data.extend(binary_chunk)
                         logger.debug(f"成功接收分段 {chunk_index}, 大小: {len(binary_chunk)} 字节")
                     else:

@@ -8,10 +8,9 @@ from typing import Dict
 
 from loguru import logger
 
-import config
 from api import wechat_download
+from plugins.registry import enabled, get_config
 from utils import call_wechat_api
-from config import cfg
 
 save_file = ''
 
@@ -94,10 +93,20 @@ def get_answer(content: str) -> str:
     return ''
 
 
+def _ccy() -> dict:
+    data = get_config("ccy")
+    return {
+        "saveimg_wxids": data.get("saveimg_wxids") or [],
+        "img_time_range": data.get("img_time_range") or ["00:00:00", "00:00:00"],
+        "text_time_range": data.get("text_time_range") or ["00:00:00", "00:00:00"],
+        "weekdays": data.get("weekdays") or [],
+    }
+
+
 def handle_text(content: str):
     global save_file
-
-    if not save_file or not in_time_range(cfg.ccy.text_time_range[0], cfg.ccy.text_time_range[1]):
+    ccy = _ccy()
+    if not save_file or not in_time_range(ccy["text_time_range"][0], ccy["text_time_range"][1]):
         return
 
     answer = get_answer(content)
@@ -118,7 +127,8 @@ def handle_text(content: str):
 async def handle_image(msg_id, from_wxid, content):
     global save_file
 
-    if not in_time_range(cfg.ccy.img_time_range[0], cfg.ccy.img_time_range[1]):
+    ccy = _ccy()
+    if not in_time_range(ccy["img_time_range"][0], ccy["img_time_range"][1]):
         return
 
     msg_img_md5 = content['msg']['img']['md5']
@@ -134,8 +144,8 @@ async def handle_image(msg_id, from_wxid, content):
 
         # Monday is 0 and Friday is 4
         weekday = datetime.datetime.today().weekday()
-        logger.debug(f"weekday={weekday} weekdays={cfg.ccy.weekdays}")
-        if weekday in cfg.ccy.weekdays:
+        logger.debug(f"weekday={weekday} weekdays={ccy['weekdays']}")
+        if weekday in ccy["weekdays"]:
             # 延时3秒发送文本消息
             time.sleep(3)
             logger.info(f"发送文本：{value}")
@@ -153,7 +163,7 @@ image_md5s = {}
 
 
 def init(images_path: str):
-    if not config.cfg.ccy.enable:
+    if not enabled("ccy"):
         return
 
     global image_md5s

@@ -1,0 +1,104 @@
+name: Build wegram (Windows)
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compile sources
+        run: python -m compileall -q admin api utils plugins main.py config.py wechat_handler.py wechat_syncer.py httpapi.py
+
+  build:
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-build.txt
+
+      - name: Package deploy directory
+        shell: pwsh
+        run: ./scripts/package.ps1
+
+      - name: Verify package layout
+        shell: pwsh
+        run: |
+          $out = "dist/wegram"
+          $required = @(
+            "wegram.exe",
+            "_internal",
+            "_internal/web/index.html",
+            "_internal/web/app.js",
+            "_internal/web/style.css",
+            "config.example.yaml",
+            "logs",
+            "data"
+          )
+          foreach ($f in $required) {
+            $p = Join-Path $out $f
+            if (-not (Test-Path $p)) {
+              Write-Error "missing: $f"
+            }
+            Write-Host "ok: $f"
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wegram-win64
+          path: dist/wegram/
+          include-hidden-files: true
+          retention-days: 7
+
+      - name: Prune old artifacts (keep latest)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const artifactName = 'wegram-win64';
+            const { owner, repo } = context.repo;
+            const all = [];
+            for (let page = 1; ; page++) {
+              const { data } = await github.rest.actions.listArtifactsForRepo({
+                owner,
+                repo,
+                per_page: 100,
+                page,
+              });
+              all.push(
+                ...data.artifacts.filter((a) => a.name === artifactName && !a.expired)
+              );
+              if (data.artifacts.length < 100) break;
+            }
+            all.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+            for (const art of all.slice(1)) {
+              core.info(`Deleting old artifact ${art.id} (${art.created_at})`);
+              await github.rest.actions.deleteArtifact({
+                owner,
+                repo,
+                artifact_id: art.id,
+              });
+            }

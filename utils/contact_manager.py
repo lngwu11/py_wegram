@@ -5,6 +5,7 @@ from typing import Dict, Optional
 
 from loguru import logger
 
+from admin.db import import_json_once, load_contacts, replace_contacts
 from api import wechat_contacts
 
 
@@ -14,91 +15,47 @@ class ContactManager:
         self.contacts = []
         self.wxid_to_contact = {}
         self.chatid_to_wxid = {}
-        self.last_modified_time = 0
         self.contact_file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "contact.json")
+        self._loaded = False
 
         # 初始加载联系人（同步方式，用于初始化）
         self._load_contacts_sync()
 
+    def _reindex(self):
+        self.wxid_to_contact = {contact["wxId"]: contact for contact in self.contacts if contact.get("wxId")}
+        self.chatid_to_wxid = {
+            contact["chatId"]: contact["wxId"]
+            for contact in self.contacts
+            if contact.get("wxId") and "chatId" in contact
+        }
+
     def _load_contacts_sync(self):
-        """同步加载联系人信息（仅用于初始化）"""
+        """从数据库加载联系人。库为空时导入 contact.json。"""
         try:
-            if not os.path.exists(self.contact_file_path):
-                self.contacts = []
-                self.wxid_to_contact = {}
-                self.chatid_to_wxid = {}
-                return
-
-            current_mtime = os.path.getmtime(self.contact_file_path)
-            if current_mtime <= self.last_modified_time:
-                return
-
-            with open(self.contact_file_path, 'r', encoding='utf-8') as file:
-                self.contacts = json.load(file)
-                self.wxid_to_contact = {contact["wxId"]: contact for contact in self.contacts}
-                self.chatid_to_wxid = {contact["chatId"]: contact["wxId"] for contact in self.contacts if "chatId" in contact}
-                self.last_modified_time = current_mtime
-
-            logger.info(f"联系人信息已更新，共 {len(self.contacts)} 个联系人")
-
+            import_json_once(self.contact_file_path, None, replace_contacts, lambda: not load_contacts())
+            self.contacts = load_contacts()
+            self._reindex()
+            self._loaded = True
+            logger.info(f"联系人已从数据库加载，共 {len(self.contacts)} 个")
         except Exception as e:
-            logger.error(f"读取联系人文件失败: {e}")
+            logger.error(f"读取联系人失败: {e}")
             self.contacts = []
             self.wxid_to_contact = {}
             self.chatid_to_wxid = {}
+            self._loaded = True
 
     async def load_contacts(self):
-        """异步加载联系人信息"""
-        try:
-            if not os.path.exists(self.contact_file_path):
-                self.contacts = []
-                self.wxid_to_contact = {}
-                self.chatid_to_wxid = {}
-                return
-
-            # 异步获取文件修改时间
-            loop = asyncio.get_event_loop()
-            current_mtime = await loop.run_in_executor(None, os.path.getmtime, self.contact_file_path)
-
-            if current_mtime <= self.last_modified_time:
-                return
-
-            # 异步读取文件
-            def _read_file():
-                with open(self.contact_file_path, 'r', encoding='utf-8') as file:
-                    return json.load(file)
-
-            contacts = await loop.run_in_executor(None, _read_file)
-
-            self.contacts = contacts
-            self.wxid_to_contact = {contact["wxId"]: contact for contact in self.contacts}
-            self.chatid_to_wxid = {contact["chatId"]: contact["wxId"] for contact in self.contacts if "chatId" in contact}
-            self.last_modified_time = current_mtime
-
-            logger.info(f"联系人信息已更新，共 {len(self.contacts)} 个联系人")
-
-        except Exception as e:
-            logger.error(f"读取联系人文件失败: {e}")
-            self.contacts = []
-            self.wxid_to_contact = {}
-            self.chatid_to_wxid = {}
+        if self._loaded:
+            return
+        self._load_contacts_sync()
 
     async def _save_contacts(self):
-        """异步保存联系人信息到文件"""
+        """保存联系人到数据库"""
         try:
-            loop = asyncio.get_event_loop()
-
-            def _write_file():
-                with open(self.contact_file_path, 'w', encoding='utf-8') as file:
-                    json.dump(self.contacts, file, ensure_ascii=False, indent=2)
-
-            await loop.run_in_executor(None, _write_file)
-
-            # 更新修改时间
-            self.last_modified_time = await loop.run_in_executor(None, os.path.getmtime, self.contact_file_path)
-
+            replace_contacts(self.contacts)
+            self._reindex()
         except Exception as e:
-            logger.error(f"保存联系人文件失败: {e}")
+            logger.error(f"保存联系人失败: {e}")
             raise
 
     async def delete_contact(self, wxid: str) -> bool:

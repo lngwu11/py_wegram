@@ -5,6 +5,7 @@ from typing import Dict, List, Any, Callable
 from loguru import logger
 
 import config
+from admin.db import import_json_once, load_groups, load_profiles, remember_group_name, replace_groups, set_custom_name, upsert_groups
 from api.wechat_api import wechat_api
 
 
@@ -34,32 +35,27 @@ class GroupMemberManager:
         self.data = self.load_from_json()
 
     def load_from_json(self) -> Dict[str, List[Dict[str, str]]]:
-        """从JSON文件加载数据"""
+        """从数据库加载群成员。库为空时导入 group.json。"""
         try:
-            if os.path.exists(self.json_file_path):
-                with open(self.json_file_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            return {}
+            import_json_once(self.json_file_path, None, replace_groups, lambda: not load_groups())
+            data = load_groups()
+            logger.info(f"群数据已从数据库加载，共 {len(data)} 个群")
+            return data
         except Exception as e:
-            logger.info(f"⚠️ 加载JSON文件失败: {e}")
+            logger.info(f"⚠️ 加载群数据失败: {e}")
             return {}
 
     def save_to_json(self, new_data: Dict[str, List[Dict[str, str]]] = None):
-        """保存数据到JSON文件"""
+        """保存群成员到数据库。传入 new_data 时只更新这些群。"""
         try:
-            data_to_save = new_data if new_data is not None else self.data
-
-            # 如果有新数据，合并到现有数据中
             if new_data is not None:
                 self.data.update(new_data)
-                data_to_save = self.data
-
-            with open(self.json_file_path, 'w', encoding='utf-8') as f:
-                json.dump(data_to_save, f, ensure_ascii=False, indent=2)
-            logger.info(f"✅ 数据已保存到: {self.json_file_path}")
+                upsert_groups(new_data)
+            else:
+                replace_groups(self.data)
             return True
         except Exception as e:
-            logger.info(f"❌ 保存JSON文件失败: {e}")
+            logger.info(f"❌ 保存群数据失败: {e}")
             return False
 
     def extract_members(self, response: Dict[str, Any]) -> Dict[str, List[Dict[str, str]]]:
@@ -181,6 +177,44 @@ class GroupMemberManager:
 
         return result
 
+    async def sync_names(self) -> Dict[str, Any]:
+        """从 wechat861 的群资料接口拉取群名和群备注。"""
+        ids = list(self.data.keys())
+        profiles = load_profiles()
+        updated = 0
+        failed = 0
+        for start in range(0, len(ids), 20):
+            batch = ids[start:start + 20]
+            result = await wechat_api("GROUP_INFO", {
+                "Wxid": config.WXID,
+                "QID": ",".join(batch),
+            }, timeout=8)
+            contacts = []
+            if isinstance(result, dict):
+                data = result.get("Data") or {}
+                if isinstance(data, dict):
+                    contacts = data.get("ContactList") or data.get("contactList") or []
+            if not contacts:
+                failed += len(batch)
+                continue
+            for index, room_id in enumerate(batch):
+                contact = contacts[index] if index < len(contacts) else None
+                if not isinstance(contact, dict):
+                    failed += 1
+                    continue
+                username = _text(contact.get("UserName")) or room_id
+                nickname = _text(contact.get("NickName"))
+                remark = _text(contact.get("Remark"))
+                if nickname:
+                    remember_group_name(username, nickname)
+                    updated += 1
+                else:
+                    failed += 1
+                current = (profiles.get(username) or {}).get("custom_name") or ""
+                if remark and not current:
+                    set_custom_name(username, remark)
+        return {"ok": failed < len(ids), "updated": updated, "failed": failed, "total": len(ids)}
+
     def get_chatroom_list(self) -> List[str]:
         """获取所有群组ID列表"""
         return list(self.data.keys())
@@ -230,6 +264,14 @@ class GroupMemberManager:
         logger.info(f"   ❌ 失败: {len(chatroom_ids) - success_count}")
 
         return results
+
+
+def _text(value) -> str:
+    if isinstance(value, dict):
+        return value.get("string") or value.get("String") or ""
+    if isinstance(value, str):
+        return value
+    return ""
 
 
 group_manager = GroupMemberManager()

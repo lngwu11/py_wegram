@@ -6,6 +6,7 @@ from typing import Any, Dict, Set
 from aiohttp import web
 from loguru import logger
 
+from admin.routes import admin_auth_middleware, register
 from config import WXID, PORT
 from wechat_handler import process_callback_message
 
@@ -171,8 +172,8 @@ async def handle_options(request):
     """处理OPTIONS请求"""
     headers = {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type'
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
     }
     return web.Response(headers=headers)
 
@@ -183,9 +184,11 @@ async def cors_middleware(request, handler):
     try:
         response = await handler(request)
         response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
         return response
+    except web.HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ 中间件处理错误: {e}")
         return web.json_response(
@@ -196,11 +199,12 @@ async def cors_middleware(request, handler):
 
 async def create_app():
     """创建aiohttp应用"""
-    app = web.Application(middlewares=[cors_middleware])
+    app = web.Application(middlewares=[cors_middleware, admin_auth_middleware])
 
     # 添加路由 - 移除路径检查，因为路由已经处理了
     app.router.add_post(f"/msg/SyncMessage/{WXID}", handle_message)
     app.router.add_options(f"/msg/SyncMessage/{WXID}", handle_options)
+    register(app)
 
     # 添加健康检查路由
     async def health_check(request):
@@ -222,6 +226,7 @@ async def run_server():
         await site.start()
 
         logger.info(f"✅ 微信消息服务启动, 端口: {PORT}, 路径: /msg/SyncMessage/{WXID}")
+        logger.info(f"✅ 管理页面: http://127.0.0.1:{PORT}/")
 
         # 保持服务运行
         try:

@@ -5,7 +5,7 @@ from typing import List
 import requests
 import yaml
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from requests import RequestException
 
 from utils.locales import Locale
@@ -18,6 +18,7 @@ class Service(BaseModel):
     port: int
     wxid: str
     baseurl: str
+    device_id: str = ""
 
 
 class CaiChengYu(BaseModel):
@@ -32,6 +33,16 @@ class QiangHongBao(BaseModel):
     blacklist: List[str]
 
 
+class AdminAuth(BaseModel):
+    username: str = ""
+    password: str = ""
+    token: str = ""
+
+
+class MediaLimit(BaseModel):
+    max_video_bytes: int = 20 * 1024 * 1024
+
+
 class Config(BaseModel):
     logfile: str
     loglevel: str
@@ -39,22 +50,61 @@ class Config(BaseModel):
 
     service: Service
     ccy: CaiChengYu
-    qhb: QiangHongBao
+    qhb: QiangHongBao = Field(default_factory=lambda: QiangHongBao(blacklist=[]))
+    admin: AdminAuth = Field(default_factory=AdminAuth)
+    media: MediaLimit = Field(default_factory=MediaLimit)
+
+
+def app_dir() -> str:
+    """可写目录：源码运行时是项目根，PyInstaller 打包后是 exe 所在目录。"""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def resource_dir(*parts: str) -> str:
+    """只读资源目录。打包后静态页在 _MEIPASS 里。"""
+    base = getattr(sys, "_MEIPASS", app_dir())
+    return os.path.join(base, *parts)
+
+
+ROOT = app_dir()
+CONFIG_PATH = os.path.join(ROOT, "config.yaml")
+DATA_DIR = os.path.join(ROOT, "data")
+WEB_DIR = resource_dir("web")
 
 
 def load_config(file_path: str) -> Config:
-    with open(file_path, 'r') as f:
+    with open(file_path, 'r', encoding='utf-8') as f:
         data = yaml.safe_load(f)
     return Config(**data)
 
 
+def load_raw_config() -> dict:
+    with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+        data = yaml.safe_load(f) or {}
+    return data
+
+
+def save_raw_config(raw: dict) -> Config:
+    """校验后写回 config.yaml，并刷新内存配置。"""
+    checked = Config(**raw)
+    with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+        yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+    reload_config()
+    return checked
+
+
 # 加载配置文件
-cfg = load_config('config.yaml')
+cfg = load_config(CONFIG_PATH)
 
 
 def reload_config():
-    global cfg
-    cfg = load_config('config.yaml')
+    global cfg, PORT, WXID, BASE_URL
+    cfg = load_config(CONFIG_PATH)
+    PORT = cfg.service.port
+    WXID = cfg.service.wxid
+    BASE_URL = cfg.service.baseurl
     logger.info(f"Reload config: {cfg}")
 
 
@@ -146,7 +196,7 @@ init_logger()
 logger.info(f"Config: {cfg}")
 
 # 创建并启动监听器
-watcher = ConfigWatcher("config.yaml", reload_callback=reload_config)
+watcher = ConfigWatcher(CONFIG_PATH, reload_callback=reload_config)
 watcher.start()
 
 # 配置

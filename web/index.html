@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>登录 · Wegram</title>
+    <link rel="stylesheet" href="/web/style.css?v=13">
+</head>
+<body class="locked">
+<section id="gate">
+    <form id="login-form" class="card">
+        <div class="card-header">登录</div>
+        <div class="card-body">
+            <div class="gate-head">
+                <span class="mark" aria-hidden="true">W</span>
+                <strong>Wegram</strong>
+            </div>
+            <p class="hint">登录后查看管理台</p>
+            <label class="label" for="login-user">账号</label>
+            <input id="login-user" type="text" autocomplete="username" required>
+            <label class="label" for="login-pass">密码</label>
+            <input id="login-pass" type="password" autocomplete="current-password" required>
+            <p id="login-msg" class="hint"></p>
+            <button class="primary" type="submit">登录</button>
+        </div>
+    </form>
+</section>
+<a class="skip" href="#app">跳到内容</a>
+<header class="navbar">
+    <div class="container-xl bar">
+        <a class="brand" href="#home">
+            <span class="mark" aria-hidden="true">W</span>
+            <span>Wegram</span>
+        </a>
+        <button id="nav-toggle" class="ghost nav-toggle" type="button" aria-label="打开菜单">菜单</button>
+        <nav id="nav" aria-label="页面">
+            <button data-page="home">首页</button>
+            <button data-page="messages">消息</button>
+            <button data-page="groups">群聊</button>
+            <button data-page="contacts">通讯录</button>
+            <button data-page="plugins">插件</button>
+            <button data-page="settings">配置</button>
+        </nav>
+        <button id="logout-btn" class="ghost" type="button">退出</button>
+    </div>
+</header>
+<main class="container-xl">
+    <div class="crumb">
+        <span>首页</span>
+        <h1 id="page-title">首页</h1>
+    </div>
+    <p id="page-desc" class="hint">登录状态、心跳和设备</p>
+    <div id="app"></div>
+</main>
+<script src="/web/app.js?v=14"></script>
+</body>
+</html>

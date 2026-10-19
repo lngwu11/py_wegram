@@ -13,7 +13,9 @@ import config
 import httpapi
 from api import wechat_contacts, wechat_tenpay
 from config import LOCALE as locale
+from plugins.registry import enabled, get_config
 from utils import message_formatter, caichengyu, call_wechat_api, filehelper
+from admin.archive import archive_incoming, archive_names
 from utils.contact_manager import contact_manager
 from utils.group_manager import group_manager
 
@@ -154,20 +156,33 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
         # if from_wxid == config.WXID:
         #     from_wxid = to_wxid
 
+        raw_xml = content if isinstance(content, str) else ""
+        original_type = msg_type
+
         # ========== 特殊消息类型处理 ==========
         # 微信上打开联系人对话
         if msg_type == 51:
             msg_type = "open_chat"
 
         # 处理非文本消息
-        if msg_type != 1 and msg_type != 10000:
+        if msg_type != 1 and msg_type != 10000 and isinstance(content, str):
             content = message_formatter.xml_to_json(content)
-            if msg_type == 49:  # App消息
-                msg_type = int(content['msg']['appmsg']['type'])
-            elif msg_type == 50:  # 通话信息
-                msg_type = content['voipmsg']['type']
-            elif msg_type == 10002:  # 系统信息
-                msg_type = content['sysmsg']['type']
+            if isinstance(content, dict):
+                if msg_type == 49:  # App消息
+                    msg_type = int(content['msg']['appmsg']['type'])
+                elif msg_type == 50:  # 通话信息
+                    msg_type = content['voipmsg']['type']
+                elif msg_type == 10002:  # 系统信息
+                    msg_type = content['sysmsg']['type']
+
+        try:
+            await archive_incoming(
+                msg_id, new_msg_id, msg_type, original_type,
+                from_wxid, to_wxid, sender_wxid, create_time,
+                content, push_content, raw_xml,
+            )
+        except Exception as e:
+            logger.error(f"归档消息失败: {e}")
 
         # ========== 早期过滤不需要处理的消息 ==========
         if (from_wxid.endswith('@placeholder_foldgroup') or  # 激活折叠聊天
@@ -181,6 +196,10 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
         contact_name, avatar_url = await _get_contact_info(from_wxid, content, push_content)
         # 获取发送者信息
         sender_name = await _get_sender_info(from_wxid, sender_wxid, contact_name)
+        try:
+            await archive_names(msg_id, contact_name, sender_name)
+        except Exception as e:
+            logger.error(f"更新消息名称失败: {e}")
 
         # 打印日志过滤掉公众号链接信息
         if not (locale.type(msg_type) == "链接" and from_wxid.startswith('gh_')):
@@ -188,10 +207,10 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
             msg_time = datetime.datetime.fromtimestamp(int(create_time)).strftime("%Y-%m-%d %H:%M:%S")
             logger.info(f"💬 类型:{locale.type(msg_type)} 时间:{msg_time} 来自:{contact_name}[{from_wxid}] 发送者:{sender_name}[{sender_wxid}] 内容:{content}")
 
-        if msg_type == 2001 and from_wxid.endswith('@chatroom'):
+        if msg_type == 2001 and from_wxid.endswith('@chatroom') and enabled("qhb"):
 
             # 过滤不抢的群
-            if all(name not in contact_name for name in config.cfg.qhb.blacklist):
+            if all(name not in contact_name for name in (get_config("qhb").get("blacklist") or [])):
                 notify_msg = f"收到来自群[{contact_name}]-[{sender_name}]的红包".encode('utf-8')
                 httpapi.do_post(config.cfg.ntfy_url, notify_msg)
                 # 自动抢红包
@@ -206,14 +225,14 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
                 await filehelper.handle_cmd(content, to_wxid)
 
             # 处理成语
-            if config.cfg.ccy.enable and sender_wxid in config.cfg.ccy.saveimg_wxids:
+            if enabled("ccy") and sender_wxid in (get_config("ccy").get("saveimg_wxids") or []):
                 caichengyu.handle_text(content)
 
         elif msg_type == 3:
             """处理图片消息"""
 
             # 处理成语
-            if config.cfg.ccy.enable and sender_wxid in config.cfg.ccy.saveimg_wxids:
+            if enabled("ccy") and sender_wxid in (get_config("ccy").get("saveimg_wxids") or []):
                 await caichengyu.handle_image(msg_id, from_wxid, content)
 
         # 获取群组

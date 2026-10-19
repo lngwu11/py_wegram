@@ -16,6 +16,9 @@ class WeChatAPIPaths:
     AUTO_HEART_BEAT = "/Login/AutoHeartBeat"
     AUTO_HEART_BEAT_LOG = "/Login/AutoHeartBeatLog"
     TWICE_LOGIN = "/Login/LoginTwiceAutoAuth"
+    LOGIN_GET_QR = "/Login/LoginGetQR"
+    LOGIN_CHECK_QR = "/Login/LoginCheckQR"
+    LOGIN_VERIFY_CODE = "/Login/YPayVerificationcode"
 
     # 消息
     SEND_TEXT = "/Msg/SendTxt"
@@ -41,6 +44,7 @@ class WeChatAPIPaths:
 
     # 群聊
     GROUP_QUIT = "/Group/Quit"
+    GROUP_INFO = "/Group/GetChatRoomInfo"
     GROUP_MEMBER = "/Group/GetChatRoomMemberDetail"
 
     # 工具
