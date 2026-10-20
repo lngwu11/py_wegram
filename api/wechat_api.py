@@ -45,6 +45,7 @@ class WeChatAPIPaths:
     # 群聊
     GROUP_QUIT = "/Group/Quit"
     GROUP_INFO = "/Group/GetChatRoomInfo"
+    GROUP_REMARK = "/Group/SetChatRoomRemarks"
     GROUP_MEMBER = "/Group/GetChatRoomMemberDetail"
 
     # 工具

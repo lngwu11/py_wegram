@@ -49,6 +49,12 @@ document.getElementById("nav-toggle").addEventListener("click", () => {
     nav.classList.toggle("open");
 });
 
+document.addEventListener("click", (event) => {
+    if (!nav.classList.contains("open")) return;
+    if (event.target.closest("#nav") || event.target.closest("#nav-toggle")) return;
+    nav.classList.remove("open");
+});
+
 function lock() {
     document.body.classList.add("locked");
     document.title = "登录 · Wegram";
@@ -96,7 +102,7 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
 const pages = {
     home: ["首页", "登录状态、心跳和设备"],
     messages: ["消息", "按群和私聊查看会话"],
-    groups: ["群聊", "微信群名和本地自定义名称"],
+    groups: ["群聊", "微信群名和群备注"],
     contacts: ["通讯录", "是否接收该联系人的消息"],
     plugins: ["插件", "猜成语和抢红包可以单独开关"],
     settings: ["配置", "通知地址和视频下载上限"]
@@ -125,14 +131,21 @@ async function show() {
     }
 }
 
+function loginBadge(login) {
+    if (login === "online") return { text: "在线", cls: "online" };
+    if (login === "offline") return { text: "离线", cls: "offline" };
+    return { text: "未知", cls: "unknown" };
+}
+
 async function renderHome(seq) {
     const status = await api("/admin/api/status");
     if (!alive(seq)) return;
     const flow = status.flow || {};
+    const badge = loginBadge(status.login);
     app.innerHTML = `
         <div class="split">
         <section class="card">
-            <div class="card-header">运行状态 <span class="badge">${escapeHtml(status.login || "未知")}</span></div>
+            <div class="card-header">运行状态 <span class="badge ${badge.cls}">${badge.text}</span></div>
             <ul class="kv">
                 <li><b>wxid</b><span>${escapeHtml(status.wxid)}</span></li>
                 <li><b>wechat861</b><span>${escapeHtml(status.baseurl)}</span></li>
@@ -147,14 +160,14 @@ async function renderHome(seq) {
             <div class="card-body">
             <label class="label">固定设备 ID</label>
             <input id="device-id" type="text" value="${escapeHtml(status.deviceId || "")}" placeholder="与 wechat861 登录缓存使用同一个设备 ID">
-            <div class="row">
+            <div class="row actions">
                 <button class="primary" id="btn-twice">二次登录并开启心跳</button>
                 <button id="btn-qr">获取登录二维码</button>
                 <button id="btn-check">检测扫码</button>
                 <button id="btn-beat">开启自动心跳</button>
                 <button class="ghost" id="btn-refresh">刷新</button>
             </div>
-            ${flow.qrBase64 ? `<img class="qr" alt="登录二维码" src="${flow.qrBase64}">` : `<p class="hint">二次登录失败后，在这里扫码。</p>`}
+            ${flow.qrBase64 ? `<img class="qr" alt="登录二维码" src="${flow.qrBase64}">` : `<p class="hint spaced">二次登录失败后，在这里扫码。</p>`}
             ${flow.needCode ? `<div class="row"><input id="code" type="text" placeholder="验证码"><button id="btn-code">提交验证码</button></div>` : ""}
             </div>
         </section>
@@ -288,7 +301,12 @@ async function renderContacts(seq) {
     app.innerHTML = `
         <section class="card">
             <div class="card-header">共 ${data.total} 人</div>
-            <div class="card-body toolbar"><input id="q" type="search" value="${escapeHtml(q)}" placeholder="按名称搜索"><button id="search">搜索</button></div>
+            <div class="card-body toolbar">
+                <input id="q" type="search" value="${escapeHtml(q)}" placeholder="按名称搜索">
+                <button id="search">搜索</button>
+                <button class="primary" id="sync-contacts">同步通讯录</button>
+            </div>
+            <p class="hint" id="contact-hint">共 ${data.total} 人。通讯录来自 wechat861 的好友列表。</p>
             <div class="table-wrap"><table>
                 <thead><tr><th>名称</th><th>wxid</th><th>类型</th><th>接收消息</th></tr></thead>
                 <tbody>${rows || `<tr><td colspan="4">没有联系人</td></tr>`}</tbody>
@@ -297,6 +315,22 @@ async function renderContacts(seq) {
     document.getElementById("search").onclick = () => {
         location.hash = "contacts?q=" + encodeURIComponent(document.getElementById("q").value.trim());
         show();
+    };
+    document.getElementById("sync-contacts").onclick = async (event) => {
+        event.target.textContent = "同步中";
+        event.target.disabled = true;
+        try {
+            const result = await api("/admin/api/contacts/sync", { method: "POST", body: "{}" });
+            if (result.total) {
+                show();
+                return;
+            }
+            document.getElementById("contact-hint").textContent = result.message || "没有更新通讯录";
+        } catch (error) {
+            document.getElementById("contact-hint").textContent = error.message;
+        }
+        event.target.textContent = "同步通讯录";
+        event.target.disabled = false;
     };
     app.querySelectorAll("input[data-wxid]").forEach((input) => {
         input.onchange = () => api("/admin/api/contacts/" + encodeURIComponent(input.dataset.wxid), {
@@ -311,39 +345,38 @@ async function renderGroups(seq) {
     const selected = params.get("id") || "";
     const q = params.get("q") || "";
     const data = await api("/admin/api/groups?q=" + encodeURIComponent(q) + "&size=50");
-    const rows = data.items.map((item) => `
-        <tr>
+    let memberHtml = "";
+    if (selected && data.items.some((item) => item.id === selected)) {
+        const detail = await api("/admin/api/groups/members?id=" + encodeURIComponent(selected));
+        const people = detail.items.map((m) => `<div class="person"><strong>${escapeHtml(m.displayname || m.nickname || m.username)}</strong><div class="meta">${escapeHtml(m.nickname || "")} · ${escapeHtml(m.username)}</div></div>`).join("");
+        memberHtml = `<tr class="member-row"><td colspan="5"><p class="hint">共 ${detail.total} 人</p><div class="member-list">${people || `<p class="hint">没有成员</p>`}</div></td></tr>`;
+    }
+    const rows = data.items.map((item) => {
+        const open = item.id === selected;
+        return `<tr class="${open ? "is-open" : ""}">
             <td>${escapeHtml(item.groupName || "未同步")}</td>
-            <td><input data-custom="${escapeHtml(item.id)}" type="text" value="${escapeHtml(item.customName || "")}" placeholder="自定义群名"></td>
-            <td>${item.count}</td>
+            <td>${escapeHtml(item.customName || "无")}</td>
+            <td class="num">${item.count}</td>
             <td class="muted">${escapeHtml(item.id)}</td>
             <td class="nowrap">
-                <button data-save="${escapeHtml(item.id)}">保存</button>
-                <button class="ghost" data-id="${escapeHtml(item.id)}">成员</button>
+                <button class="ghost${open ? " active" : ""}" data-id="${escapeHtml(item.id)}">${open ? "收起" : "成员"}</button>
             </td>
-        </tr>`).join("");
-    let members = "";
-    if (selected) {
-        const detail = await api("/admin/api/groups/members?id=" + encodeURIComponent(selected) + "&size=50");
-        members = `<section class="card members"><div class="card-header">成员</div><div class="card-body"><p class="hint">${escapeHtml(selected)} · ${detail.total} 人，显示前 50</p>`
-            + detail.items.map((m) => `<div class="person"><strong>${escapeHtml(m.displayname || m.nickname || m.username)}</strong><div class="meta">${escapeHtml(m.nickname || "")} · ${escapeHtml(m.username)}</div></div>`).join("")
-            + `</div></section>`;
-    }
+        </tr>${open ? memberHtml : ""}`;
+    }).join("");
     if (!alive(seq)) return;
     app.innerHTML = `
         <section class="card">
             <div class="card-body toolbar">
-                <input id="q" type="search" value="${escapeHtml(q)}" placeholder="群名、自定义群名或群 id">
+                <input id="q" type="search" value="${escapeHtml(q)}" placeholder="群名、群备注或群 id">
                 <button id="search">搜索</button>
                 <button class="primary" id="sync-names">同步群名</button>
             </div>
             <p class="hint" id="group-hint">共 ${data.total} 个群</p>
             <div class="table-wrap"><table>
-                <thead><tr><th>群名</th><th>自定义群名</th><th>人数</th><th>群 id</th><th>操作</th></tr></thead>
+                <thead><tr><th>群名</th><th>群备注</th><th class="num">人数</th><th>群 id</th><th>操作</th></tr></thead>
                 <tbody>${rows || `<tr><td colspan="5">没有群数据</td></tr>`}</tbody>
             </table></div>
-        </section>
-        ${members}`;
+        </section>`;
     document.getElementById("search").onclick = () => {
         location.hash = "groups?q=" + encodeURIComponent(document.getElementById("q").value.trim());
         show();
@@ -366,19 +399,13 @@ async function renderGroups(seq) {
             event.target.disabled = false;
         }
     };
-    app.querySelectorAll("button[data-save]").forEach((button) => {
-        button.onclick = async () => {
-            const input = app.querySelector(`input[data-custom="${CSS.escape(button.dataset.save)}"]`);
-            await api("/admin/api/groups/profile", {
-                method: "PUT",
-                body: JSON.stringify({ id: button.dataset.save, customName: input.value.trim() })
-            });
-            button.textContent = "已保存";
-        };
-    });
     app.querySelectorAll("button[data-id]").forEach((button) => {
         button.onclick = () => {
-            location.hash = "groups?id=" + encodeURIComponent(button.dataset.id) + "&q=" + encodeURIComponent(q);
+            const next = button.dataset.id === selected ? "" : button.dataset.id;
+            const query = new URLSearchParams();
+            if (next) query.set("id", next);
+            if (q) query.set("q", q);
+            location.hash = "groups" + (query.toString() ? "?" + query.toString() : "");
             show();
         };
     });
@@ -409,7 +436,7 @@ async function renderMessages(seq) {
     const peerButtons = peers.map((item) => `
         <button class="peer ${item.peer === msgPeer ? "active" : ""}" data-peer="${escapeHtml(item.peer)}">
             <strong>${escapeHtml(item.title)}</strong>
-            ${msgKind === "group" && item.customName ? `<div class="meta">群名 ${escapeHtml(item.groupName || "未识别")}</div>` : ""}
+            ${msgKind === "group" && item.customName ? `<div class="meta">备注 ${escapeHtml(item.customName)}</div>` : ""}
             <div class="preview">${escapeHtml(item.text || "")}</div>
             <div class="meta">${escapeHtml(fmtTime(item.create_time))} · ${item.total} 条</div>
         </button>`).join("");
@@ -428,7 +455,7 @@ async function renderMessages(seq) {
             <button data-kind="private" class="${msgKind === "private" ? "active" : ""}">私聊</button>
         </div>
         <div class="inbox ${msgPeer ? "reading" : ""}">
-            <div class="peers">${peerButtons || `<p class="hint">还没有${msgKind === "group" ? "群" : "私聊"}消息</p>`}</div>
+            <div class="peers">${peerButtons || `<p class="hint empty">还没有${msgKind === "group" ? "群" : "私聊"}消息</p>`}</div>
             <section class="thread card">
                 <div class="thread-head">
                     <button class="ghost" id="back-peers">返回</button>

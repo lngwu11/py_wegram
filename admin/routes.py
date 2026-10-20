@@ -4,6 +4,7 @@ from aiohttp import web
 
 import config
 from admin import auth, login_flow
+from api.wechat_api import wechat_api
 from admin.hub import hub
 from admin.db import load_profiles, set_custom_name
 from admin.store import message_store
@@ -26,6 +27,7 @@ def register(app: web.Application) -> None:
     app.router.add_get("/admin/api/config", admin_get_config)
     app.router.add_put("/admin/api/config", admin_put_config)
     app.router.add_get("/admin/api/contacts", admin_contacts)
+    app.router.add_post("/admin/api/contacts/sync", admin_sync_contacts)
     app.router.add_put("/admin/api/contacts/{wxid}", admin_update_contact)
     app.router.add_get("/admin/api/groups", admin_groups)
     app.router.add_post("/admin/api/groups/sync-names", admin_sync_group_names)
@@ -134,6 +136,10 @@ async def admin_put_config(request):
     return _json({"ok": True})
 
 
+async def admin_sync_contacts(_request):
+    return _json(await contact_manager.sync_from_wechat())
+
+
 async def admin_contacts(request):
     keyword = (request.query.get("q") or "").strip()
     contacts = await contact_manager.search_contacts_by_name(keyword)
@@ -205,9 +211,18 @@ async def admin_sync_group_names(_request):
 async def admin_group_profile(request):
     body = await request.json()
     chatroom_id = (body.get("id") or "").strip()
+    remark = (body.get("customName") or "").strip()
     if not chatroom_id:
         return _json({"ok": False, "message": "缺少群 id"}, status=400)
-    set_custom_name(chatroom_id, body.get("customName") or "")
+    result = await wechat_api("GROUP_REMARK", {
+        "Wxid": config.WXID,
+        "QID": chatroom_id,
+        "Content": remark,
+    }, timeout=8)
+    if not isinstance(result, dict) or not result.get("Success"):
+        message = result.get("Message") if isinstance(result, dict) else ""
+        return _json({"ok": False, "message": message or "群备注没有写入微信"}, status=502)
+    set_custom_name(chatroom_id, remark)
     return _json({"ok": True})
 
 
@@ -222,7 +237,7 @@ async def admin_conversations(request):
             profile = profiles.get(row["peer"]) or {}
             row["groupName"] = profile.get("group_name") or row.get("contact_name") or ""
             row["customName"] = profile.get("custom_name") or ""
-            row["title"] = row["customName"] or row["groupName"] or row["peer"]
+            row["title"] = row["groupName"] or row["customName"] or row["peer"]
         else:
             row["title"] = row.get("contact_name") or row["peer"]
             row["groupName"] = ""
@@ -233,15 +248,10 @@ async def admin_conversations(request):
 async def admin_group_members(request):
     chatroom_id = request.query.get("id") or ""
     members = group_manager.get_all_members(chatroom_id)
-    page = _page(request)
-    size = _size(request, default=50)
-    start = (page - 1) * size
     return _json({
         "id": chatroom_id,
         "total": len(members),
-        "page": page,
-        "size": size,
-        "items": members[start:start + size],
+        "items": members,
     })
 
 

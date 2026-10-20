@@ -223,103 +223,62 @@ class ContactManager:
 
         await self._save_contacts()
 
-    async def update_contacts_and_sync_to_json(self, chat_id: int):
-        """获取联系人列表并同步到contact.json"""
+    async def sync_from_wechat(self) -> dict:
+        """从 wechat861 的好友列表拉取通讯录。"""
         try:
-            # 发送开始处理的消息
-            logger.info("🔄 正在获取联系人列表...")
-
-            # 获取联系人列表
-            friend_contacts, chatroom_contacts, gh_contacts = await wechat_contacts.get_friends()
-            all_contacts = friend_contacts + chatroom_contacts
-            if not all_contacts:
-                # await telegram_sender.send_text(chat_id, "❌ 未获取到好友联系人")
-                return
-
-            logger.info(f"📋 获取到 {len(all_contacts)} 个好友，正在同步信息...")
-
-            # 将all_contacts按每组20个分割
-            batch_size = 20
-            batches = [all_contacts[i:i + batch_size] for i in range(0, len(all_contacts), batch_size)]
-
-            new_contacts_count = 0
-            total_batches = len(batches)
-
-            # 处理每个批次
-            for batch_index, batch in enumerate(batches):
-                try:
-                    # 发送进度更新
-                    if batch_index % 5 == 0 or batch_index == total_batches - 1:  # 每5个批次或最后一个批次更新进度
-                        progress = f"⏳ 处理进度: {batch_index + 1}/{total_batches} 批次"
-                        logger.info(progress)
-
-                    # 调用get_user_info获取用户信息
-                    user_info_dict = await wechat_contacts.get_user_info(batch)
-
-                    if not user_info_dict:
-                        logger.warning(f"批次 {batch_index + 1} 未获取到用户信息")
-                        continue
-
-                    # 遍历用户信息
-                    for wxid, user_info in user_info_dict.items():
-                        if user_info is None:
-                            logger.warning(f"用户 {wxid} 信息获取失败")
-                            continue
-
-                        # 检查wxId是否已存在于contact.json中
-                        existing_contact = await self.get_contact(wxid)
-
-                        if existing_contact is None:
-                            # 不存在则创建新联系人
-                            new_contact = {
-                                "name": user_info.name,
-                                "wxId": wxid,
-                                "chatId": -9999999999,
-                                "isGroup": False,
-                                "isReceive": True,
-                                "alias": "",
-                                "avatarLink": user_info.avatar_url if user_info.avatar_url else ""
-                            }
-
-                            # 添加到联系人管理器
-                            self.contacts.append(new_contact)
-                            self.wxid_to_contact[wxid] = new_contact
-
-                            new_contacts_count += 1
-                            logger.info(f"添加新联系人: {user_info.name} ({wxid})")
-
-                    # 每处理几个批次休眠一下，避免请求过于频繁
-                    if batch_index < total_batches - 1:  # 不是最后一个批次
-                        await asyncio.sleep(0.5)  # 休眠500毫秒
-
-                except Exception as e:
-                    logger.error(f"处理批次 {batch_index + 1} 时出错: {str(e)}")
-                    continue
-
-            # 保存所有更改到文件
-            if new_contacts_count > 0:
-                await self._save_contacts()
-                success_msg = f"✅ 同步完成！新增 {new_contacts_count} 个联系人到contact.json"
-            else:
-                success_msg = "✅ 同步完成！所有联系人已存在，无新增联系人"
-
-            logger.info(success_msg)
-
-            # 发送统计信息
-            stats_msg = f"""
-    📊 **同步统计**
-    • 总好友数: {len(all_contacts)}
-    • 新增联系人: {new_contacts_count}
-    • 处理批次: {total_batches}
-    • 当前联系人总数: {len(self.contacts)}
-            """
-            logger.info(stats_msg)
-
+            friend_contacts, chatroom_contacts, _gh = await wechat_contacts.get_friends()
         except Exception as e:
-            error_msg = f"❌ 更新联系人失败: {str(e)}"
-            # await telegram_sender.send_text(chat_id, error_msg)
-            logger.error(f"update_contacts执行失败: {str(e)}")
+            logger.error(f"获取通讯录失败: {e}")
+            return {"ok": False, "message": "没有从 wechat861 取到通讯录", "added": 0, "total": len(self.contacts)}
+        all_contacts = list(friend_contacts) + list(chatroom_contacts)
+        if not all_contacts:
+            return {"ok": False, "message": "没有从 wechat861 取到通讯录", "added": 0, "total": len(self.contacts)}
+
+        added = 0
+        batches = [all_contacts[i:i + 20] for i in range(0, len(all_contacts), 20)]
+        for batch_index, batch in enumerate(batches):
+            try:
+                user_info_dict = await wechat_contacts.get_user_info(batch)
+            except Exception as e:
+                logger.error(f"处理通讯录批次失败: {e}")
+                continue
+            if not isinstance(user_info_dict, dict):
+                continue
+            for wxid, user_info in user_info_dict.items():
+                if user_info is None:
+                    continue
+                existing = self.wxid_to_contact.get(wxid)
+                is_group = wxid.endswith("@chatroom")
+                if existing is None:
+                    contact = {
+                        "name": user_info.name,
+                        "wxId": wxid,
+                        "chatId": -9999999999,
+                        "isGroup": is_group,
+                        "isReceive": True,
+                        "alias": "",
+                        "avatarLink": user_info.avatar_url or "",
+                    }
+                    self.contacts.append(contact)
+                    self.wxid_to_contact[wxid] = contact
+                    added += 1
+                else:
+                    existing["name"] = user_info.name or existing.get("name") or ""
+                    existing["isGroup"] = is_group
+                    if user_info.avatar_url:
+                        existing["avatarLink"] = user_info.avatar_url
+            if batch_index < len(batches) - 1:
+                await asyncio.sleep(0.2)
+        await self._save_contacts()
+        return {
+            "ok": True,
+            "added": added,
+            "total": len(self.contacts),
+            "message": f"已同步 {len(self.contacts)} 个联系人，新增 {added} 个",
+        }
+
+    async def update_contacts_and_sync_to_json(self, chat_id: int = 0):
+        return await self.sync_from_wechat()
 
 
-# 创建全局实例
 contact_manager = ContactManager()

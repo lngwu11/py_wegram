@@ -5,7 +5,7 @@ from typing import Dict, List, Any, Callable
 from loguru import logger
 
 import config
-from admin.db import import_json_once, load_groups, load_profiles, remember_group_name, replace_groups, set_custom_name, upsert_groups
+from admin.db import import_json_once, load_groups, remember_group_name, replace_groups, set_custom_name, upsert_groups
 from api.wechat_api import wechat_api
 
 
@@ -180,7 +180,6 @@ class GroupMemberManager:
     async def sync_names(self) -> Dict[str, Any]:
         """从 wechat861 的群资料接口拉取群名和群备注。"""
         ids = list(self.data.keys())
-        profiles = load_profiles()
         updated = 0
         failed = 0
         for start in range(0, len(ids), 20):
@@ -210,9 +209,7 @@ class GroupMemberManager:
                     updated += 1
                 else:
                     failed += 1
-                current = (profiles.get(username) or {}).get("custom_name") or ""
-                if remark and not current:
-                    set_custom_name(username, remark)
+                set_custom_name(username, remark)
         return {"ok": failed < len(ids), "updated": updated, "failed": failed, "total": len(ids)}
 
     def get_chatroom_list(self) -> List[str]:

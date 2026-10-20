@@ -40,10 +40,14 @@ async def get_user_info(towxids):
 
     # 发送请求
     result = await wechat_api("USER_INFO", body)
+    if not isinstance(result, dict) or not result.get("Success"):
+        error_msg = result.get("Message", "未知错误") if isinstance(result, dict) else "wechat861 无响应"
+        logger.error(f"API请求失败: {error_msg}")
+        if is_batch:
+            return {wxid: None for wxid in wxid_list}
+        return None
 
-    # 解析响应
-    if result.get("Success"):
-        try:
+    try:
             contact_list = result["Data"]["ContactList"]
             if contact_list and len(contact_list) > 0:
                 if is_batch:
@@ -73,17 +77,12 @@ async def get_user_info(towxids):
                                   contact.get("SmallHeadImgUrl") or
                                   "")
                     return UserInfo(name, avatar_url)
-        except (KeyError, IndexError) as e:
-            logger.error(f"解析联系人信息时出错: {str(e)}")
-    else:
-        error_msg = result.get('Message', '未知错误')
-        logger.error(f"API请求失败: {error_msg}")
+    except (KeyError, IndexError, TypeError) as e:
+        logger.error(f"解析联系人信息时出错: {str(e)}")
 
-    # 返回对应的None值
     if is_batch:
         return {wxid: None for wxid in wxid_list}
-    else:
-        return None
+    return None
 
 
 # 修改后的函数
@@ -122,10 +121,8 @@ async def get_friends():
         try:
             # 调用API
             response = await wechat_api("USER_LIST", body)
-
-            # 检查响应是否成功
-            if not response.get('Success', False):
-                error_msg = response.get('Message', '未知错误')
+            if not isinstance(response, dict) or not response.get("Success", False):
+                error_msg = response.get("Message", "未知错误") if isinstance(response, dict) else "wechat861 无响应"
                 logger.info(f"API调用失败: {error_msg}")
                 break
 
