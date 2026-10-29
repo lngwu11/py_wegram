@@ -279,7 +279,8 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
             except Exception as e:
                 logger.error(f"更新消息名称失败: {e}")
 
-        if not (locale.type(msg_type) == "链接" and from_wxid.startswith('gh_')):
+        # open_chat 等黑名单噪音：不入库也不打日志；公众号链接仍跳过刷屏
+        if (not skip_archive) and not (locale.type(msg_type) == "链接" and from_wxid.startswith('gh_')):
             msg_time = datetime.datetime.fromtimestamp(int(create_time)).strftime("%Y-%m-%d %H:%M:%S")
             preview = format_log_content(msg_type, content, push_content)
             logger.info(
