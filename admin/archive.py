@@ -11,25 +11,79 @@ from api.wechat_download import chunked_download, dated_media_dir
 
 
 def summarize(msg_type, content, push_content: str) -> Tuple[str, str, str]:
-    """返回文本摘要、CDN 文件号、媒体种类。"""
+    """返回文本摘要、CDN 文件号、媒体种类。
+
+    结构化消息（文件/引用/表情等）不能只依赖 PushContent，否则 PushContent
+    为空时 text 会落成空串，管理台消息列表就会出现只有名字和时间的空气泡。
+    """
     cdn = ""
     kind = ""
-    if msg_type == 3 and isinstance(content, dict):
-        img = (content.get("msg") or {}).get("img") or {}
-        if isinstance(img, dict):
+    push = (push_content or "").strip()
+    text = ""
+
+    if isinstance(content, dict):
+        msg = content.get("msg") or {}
+        if not isinstance(msg, dict):
+            msg = {}
+        img = msg.get("img")
+        video = msg.get("videomsg")
+        emoji = msg.get("emoji")
+        appmsg = msg.get("appmsg")
+
+        if isinstance(img, dict) and img:
+            kind = "image"
             cdn = img.get("cdnbigimgurl") or img.get("cdnmidimgurl") or img.get("cdnthumburl") or ""
-        kind = "image"
-        text = push_content or "[图片]"
-    elif msg_type == 43 and isinstance(content, dict):
-        video = (content.get("msg") or {}).get("videomsg") or {}
-        if isinstance(video, dict):
+            text = push or "[图片]"
+        elif isinstance(video, dict) and video:
+            kind = "video"
             cdn = video.get("cdnvideourl") or video.get("cdnthumburl") or ""
-        kind = "video"
-        text = push_content or "[视频]"
+            text = push or "[视频]"
+        elif isinstance(emoji, dict) and emoji:
+            text = push or "[表情]"
+        elif isinstance(appmsg, dict):
+            app_type = str(appmsg.get("type") or "")
+            title = appmsg.get("title") or ""
+            if isinstance(title, dict):
+                title = ""
+            title = str(title).strip()
+            if app_type == "6":
+                text = push or (f"[文件] {title}" if title else "[文件]")
+            elif app_type == "57":
+                text = push or (f"[引用] {title}" if title else "[引用]")
+            elif app_type in ("5", "33", "36"):
+                text = push or (f"[链接] {title}" if title else "[链接]")
+            elif title:
+                text = push or title
+            else:
+                text = push or "[应用消息]"
+        elif isinstance(content.get("sysmsg"), dict):
+            revoke = content["sysmsg"].get("revokemsg") or {}
+            if isinstance(revoke, dict) and revoke.get("replacemsg"):
+                text = str(revoke.get("replacemsg"))
+            else:
+                text = push or "[系统消息]"
+        else:
+            text = push
     elif isinstance(content, str):
         text = content
     else:
-        text = push_content or ""
+        text = push
+
+    if not (text or "").strip():
+        fallback = {
+            3: "[图片]",
+            34: "[语音]",
+            42: "[名片]",
+            43: "[视频]",
+            47: "[表情]",
+            48: "[位置]",
+            49: "[应用消息]",
+            2000: "[转账]",
+            2001: "[红包]",
+            "revokemsg": "[撤回]",
+        }
+        text = fallback.get(msg_type) or (f"[{msg_type}]" if msg_type not in (None, "") else "[消息]")
+
     return text[:2000], str(cdn)[:1000], kind
 
 

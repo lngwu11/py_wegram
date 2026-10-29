@@ -255,22 +255,29 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
                 elif msg_type == 10002:  # 系统信息
                     msg_type = content['sysmsg']['type']
 
-        try:
-            await archive_incoming(
-                msg_id, new_msg_id, msg_type, original_type,
-                from_wxid, to_wxid, sender_wxid, create_time,
-                content, push_content, raw_xml,
-            )
-        except Exception as e:
-            logger.error(f"归档消息失败: {e}")
+        skip_archive = (
+            from_wxid.endswith('@placeholder_foldgroup')
+            or from_wxid == 'notification_messages'
+            or msg_type in black_list
+        )
+        if not skip_archive:
+            try:
+                await archive_incoming(
+                    msg_id, new_msg_id, msg_type, original_type,
+                    from_wxid, to_wxid, sender_wxid, create_time,
+                    content, push_content, raw_xml,
+                )
+            except Exception as e:
+                logger.error(f"归档消息失败: {e}")
 
         # ========== 获取联系人和发送者信息（日志与业务共用） ==========
         contact_name, avatar_url = await _get_contact_info(from_wxid, content, push_content)
         sender_name = await _get_sender_info(from_wxid, sender_wxid, contact_name)
-        try:
-            await archive_names(msg_id, contact_name, sender_name)
-        except Exception as e:
-            logger.error(f"更新消息名称失败: {e}")
+        if not skip_archive:
+            try:
+                await archive_names(msg_id, contact_name, sender_name)
+            except Exception as e:
+                logger.error(f"更新消息名称失败: {e}")
 
         if not (locale.type(msg_type) == "链接" and from_wxid.startswith('gh_')):
             msg_time = datetime.datetime.fromtimestamp(int(create_time)).strftime("%Y-%m-%d %H:%M:%S")
@@ -282,9 +289,7 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
             )
 
         # ========== 早期过滤不需要处理的消息 ==========
-        if (from_wxid.endswith('@placeholder_foldgroup') or  # 激活折叠聊天
-                from_wxid == 'notification_messages' or  # 系统通知
-                msg_type in black_list or  # 黑名单类型
+        if (skip_archive or
                 (sender_wxid == config.WXID and msg_type == "revokemsg")):  # 自己撤回的消息
             return
 

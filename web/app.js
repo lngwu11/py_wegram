@@ -502,9 +502,10 @@ function bubble(item) {
             ? `<img class="media" alt="" src="${item.mediaUrl}">`
             : `<a href="${item.mediaUrl}" target="_blank">打开文件</a>`
     ) : "";
+    const text = String(item.text || "").trim() || (media ? "" : "[空消息]");
     return `<article class="bubble" data-id="${escapeHtml(item.msg_id)}">
         <div class="who">${escapeHtml(item.sender_name || item.sender_wxid || "")}</div>
-        <div class="msg">${escapeHtml(item.text || "")}</div>
+        ${text ? `<div class="msg">${escapeHtml(text)}</div>` : ""}
         ${media}
         <time>${escapeHtml(fmtTime(item.create_time))}</time>
     </article>`;
