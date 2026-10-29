@@ -36,6 +36,66 @@ function fmtTime(ts) {
     return date.toLocaleString();
 }
 
+function readPage(params, fallback = 1) {
+    const value = Number(params.get("page") || fallback);
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+function readSize(params, fallback = 50) {
+    const value = Number(params.get("size") || fallback);
+    return value === 100 ? 100 : 50;
+}
+
+function pageCount(total, size) {
+    return Math.max(1, Math.ceil((total || 0) / Math.max(size || 1, 1)));
+}
+
+function pagerHtml(data) {
+    const total = data.total || 0;
+    const size = data.size || 50;
+    const current = data.page || 1;
+    const pages = pageCount(total, size);
+    const from = total ? Math.min(total, (current - 1) * size + 1) : 0;
+    const to = Math.min(total, current * size);
+    return `<div class="pager">
+        <label class="pager-size">每页
+            <select id="page-size">
+                <option value="50" ${size === 50 ? "selected" : ""}>50</option>
+                <option value="100" ${size === 100 ? "selected" : ""}>100</option>
+            </select>
+            条
+        </label>
+        <button class="ghost" type="button" data-page-nav="${current - 1}" ${current <= 1 || pages <= 1 ? "disabled" : ""}>上一页</button>
+        <span class="hint">${from}-${to} / ${total} · 第 ${current}/${pages} 页</span>
+        <button class="ghost" type="button" data-page-nav="${current + 1}" ${current >= pages ? "disabled" : ""}>下一页</button>
+    </div>`;
+}
+
+function bindPager(route, query) {
+    app.querySelectorAll("[data-page-nav]").forEach((button) => {
+        button.onclick = () => {
+            if (button.disabled) return;
+            const next = Number(button.dataset.pageNav);
+            if (!Number.isFinite(next) || next < 1) return;
+            const params = new URLSearchParams(query);
+            params.set("page", String(next));
+            location.hash = route + "?" + params.toString();
+            show();
+        };
+    });
+    const sizeSelect = document.getElementById("page-size");
+    if (sizeSelect) {
+        sizeSelect.onchange = () => {
+            const params = new URLSearchParams(query);
+            params.set("size", sizeSelect.value === "100" ? "100" : "50");
+            params.delete("page");
+            const text = params.toString();
+            location.hash = route + (text ? "?" + text : "");
+            show();
+        };
+    }
+}
+
 nav.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-page]");
     if (!button) return;
@@ -288,8 +348,11 @@ async function renderPlugins(seq) {
 }
 
 async function renderContacts(seq) {
-    const q = new URLSearchParams(location.hash.split("?")[1] || "").get("q") || "";
-    const data = await api("/admin/api/contacts?q=" + encodeURIComponent(q));
+    const params = new URLSearchParams(location.hash.split("?")[1] || "");
+    const q = params.get("q") || "";
+    const current = readPage(params);
+    const size = readSize(params);
+    const data = await api("/admin/api/contacts?q=" + encodeURIComponent(q) + "&page=" + current + "&size=" + size);
     if (!alive(seq)) return;
     const rows = data.items.map((item) => `
         <tr>
@@ -311,9 +374,14 @@ async function renderContacts(seq) {
                 <thead><tr><th>名称</th><th>wxid</th><th>类型</th><th>接收消息</th></tr></thead>
                 <tbody>${rows || `<tr><td colspan="4">没有联系人</td></tr>`}</tbody>
             </table></div>
+            ${pagerHtml(data)}
         </section>`;
     document.getElementById("search").onclick = () => {
-        location.hash = "contacts?q=" + encodeURIComponent(document.getElementById("q").value.trim());
+        const next = document.getElementById("q").value.trim();
+        const query = new URLSearchParams();
+        if (next) query.set("q", next);
+        if (size !== 50) query.set("size", String(size));
+        location.hash = "contacts" + (query.toString() ? "?" + query.toString() : "");
         show();
     };
     document.getElementById("sync-contacts").onclick = async (event) => {
@@ -338,13 +406,19 @@ async function renderContacts(seq) {
             body: JSON.stringify({ isReceive: input.checked })
         });
     });
+    const keep = {};
+    if (q) keep.q = q;
+    if (size !== 50) keep.size = String(size);
+    bindPager("contacts", keep);
 }
 
 async function renderGroups(seq) {
     const params = new URLSearchParams(location.hash.split("?")[1] || "");
     const selected = params.get("id") || "";
     const q = params.get("q") || "";
-    const data = await api("/admin/api/groups?q=" + encodeURIComponent(q) + "&size=50");
+    const current = readPage(params);
+    const size = readSize(params);
+    const data = await api("/admin/api/groups?q=" + encodeURIComponent(q) + "&page=" + current + "&size=" + size);
     let memberHtml = "";
     if (selected && data.items.some((item) => item.id === selected)) {
         const detail = await api("/admin/api/groups/members?id=" + encodeURIComponent(selected));
@@ -376,9 +450,14 @@ async function renderGroups(seq) {
                 <thead><tr><th>群名</th><th>群备注</th><th class="num">人数</th><th>群 id</th><th>操作</th></tr></thead>
                 <tbody>${rows || `<tr><td colspan="5">没有群数据</td></tr>`}</tbody>
             </table></div>
+            ${pagerHtml(data)}
         </section>`;
     document.getElementById("search").onclick = () => {
-        location.hash = "groups?q=" + encodeURIComponent(document.getElementById("q").value.trim());
+        const next = document.getElementById("q").value.trim();
+        const query = new URLSearchParams();
+        if (next) query.set("q", next);
+        if (size !== 50) query.set("size", String(size));
+        location.hash = "groups" + (query.toString() ? "?" + query.toString() : "");
         show();
     };
     document.getElementById("sync-names").onclick = async (event) => {
@@ -405,10 +484,16 @@ async function renderGroups(seq) {
             const query = new URLSearchParams();
             if (next) query.set("id", next);
             if (q) query.set("q", q);
+            if (current > 1) query.set("page", String(current));
+            if (size !== 50) query.set("size", String(size));
             location.hash = "groups" + (query.toString() ? "?" + query.toString() : "");
             show();
         };
     });
+    const keep = {};
+    if (q) keep.q = q;
+    if (size !== 50) keep.size = String(size);
+    bindPager("groups", keep);
 }
 
 function bubble(item) {
