@@ -7,7 +7,7 @@ from loguru import logger
 import config
 from admin.hub import hub
 from admin.store import message_store
-from api.wechat_download import chunked_download
+from api.wechat_download import chunked_download, dated_media_dir
 
 
 def summarize(msg_type, content, push_content: str) -> Tuple[str, str, str]:
@@ -74,7 +74,7 @@ async def archive_incoming(
 
     if kind and isinstance(content, dict):
         import asyncio
-        asyncio.create_task(_download_media(str(msg_id), kind, from_wxid, content))
+        asyncio.create_task(_download_media(str(msg_id), kind, from_wxid, content, create_time))
 
 
 async def archive_names(msg_id, contact_name: str, sender_name: str) -> None:
@@ -92,15 +92,15 @@ async def archive_names(msg_id, contact_name: str, sender_name: str) -> None:
     })
 
 
-async def _download_media(msg_id: str, kind: str, from_wxid: str, content: dict) -> None:
+async def _download_media(msg_id: str, kind: str, from_wxid: str, content: dict, create_time=0) -> None:
     try:
         if kind == "image":
-            save_dir = os.path.join(config.ROOT, "chat_images")
+            save_dir = dated_media_dir(os.path.join(config.ROOT, "chat_images"), create_time)
             result = await chunked_download(
                 "GET_IMAGE", msg_id, from_wxid, content, "img", "png", save_dir
             )
         elif kind == "video":
-            save_dir = os.path.join(config.ROOT, "chat_videos")
+            save_dir = dated_media_dir(os.path.join(config.ROOT, "chat_videos"), create_time)
             result = await chunked_download(
                 "GET_VIDEO", msg_id, from_wxid, content, "videomsg", "mp4", save_dir,
                 max_bytes=config.cfg.media.max_video_bytes,

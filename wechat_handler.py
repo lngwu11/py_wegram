@@ -22,6 +22,86 @@ from utils.group_manager import group_manager
 black_list = ['open_chat', 'bizlivenotify', 'qy_chat_update', 74, 'paymsg']
 
 
+def _clip(text: str, limit: int = 200) -> str:
+    text = (text or "").replace("\n", " ").strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "…"
+
+
+def format_log_content(msg_type, content, push_content: str = "") -> str:
+    """日志用内容摘要：文本可读，媒体只保留关键字段。"""
+    if isinstance(content, str):
+        return _clip(content)
+
+    if not isinstance(content, dict):
+        return _clip(push_content) or f"[{locale.type(msg_type) or msg_type}]"
+
+    msg = content.get("msg") or {}
+    if msg_type == 3 or (isinstance(msg, dict) and "img" in msg):
+        img = msg.get("img") or {}
+        if isinstance(img, dict) and img:
+            w = img.get("cdnthumbwidth") or "?"
+            h = img.get("cdnthumbheight") or "?"
+            size = img.get("length") or "?"
+            md5 = (img.get("md5") or "")[:16]
+            return f"[图片] {size}B md5={md5} {w}x{h}"
+
+    if msg_type == 43 or (isinstance(msg, dict) and "videomsg" in msg):
+        video = msg.get("videomsg") or {}
+        if isinstance(video, dict) and video:
+            play = video.get("playlength") or "?"
+            size = video.get("length") or "?"
+            md5 = (video.get("md5") or "")[:16]
+            return f"[视频] {play}s {size}B md5={md5}"
+
+    if msg_type in (47, 8) or (isinstance(msg, dict) and "emoji" in msg):
+        emoji = msg.get("emoji") or {}
+        if isinstance(emoji, dict) and emoji:
+            md5 = (emoji.get("md5") or "")[:16]
+            size = emoji.get("len") or "?"
+            return f"[表情] md5={md5} {size}B"
+
+    appmsg = msg.get("appmsg") if isinstance(msg, dict) else None
+    if isinstance(appmsg, dict):
+        app_type = str(appmsg.get("type") or msg_type)
+        title = appmsg.get("title") or ""
+        if isinstance(title, dict):
+            title = ""
+        if app_type == "6" or msg_type == 6:
+            attach = appmsg.get("appattach") or {}
+            if not isinstance(attach, dict):
+                attach = {}
+            ext = attach.get("fileext") or ""
+            size = attach.get("totallen") or "?"
+            name = title or "未命名"
+            if ext and not str(name).endswith(f".{ext}"):
+                name = f"{name}.{ext}"
+            return f"[文件] {_clip(str(name), 80)} {size}B"
+        if app_type == "57" or msg_type == 57:
+            refer = appmsg.get("refermsg") or {}
+            if not isinstance(refer, dict):
+                refer = {}
+            who = refer.get("displayname") or refer.get("chatusr") or ""
+            ref = refer.get("content") or ""
+            if isinstance(ref, str) and ref.lstrip().startswith("<?xml"):
+                ref = "[媒体]"
+            return f"[引用] {_clip(str(title), 80)} ← {_clip(f'{who}: {ref}', 100)}"
+        if title:
+            return f"[{locale.type(msg_type) or '应用消息'}] {_clip(str(title), 120)}"
+
+    if msg_type == "revokemsg" or "sysmsg" in content:
+        sysmsg = content.get("sysmsg") or {}
+        if isinstance(sysmsg, dict):
+            revoke = sysmsg.get("revokemsg") or {}
+            if isinstance(revoke, dict) and revoke.get("replacemsg"):
+                return _clip(str(revoke.get("replacemsg")), 120)
+
+    if push_content:
+        return _clip(push_content)
+    return f"[{locale.type(msg_type) or msg_type}]"
+
+
 # 提取回调信息 - 保持同步，纯数据处理
 def extract_message(data):
     try:
@@ -184,28 +264,29 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
         except Exception as e:
             logger.error(f"归档消息失败: {e}")
 
-        # ========== 早期过滤不需要处理的消息 ==========
-        if (from_wxid.endswith('@placeholder_foldgroup') or  # 激活折叠聊天
-                from_wxid == 'notification_messages' or  # 系统通知
-                msg_type in black_list or  # 黑名单类型
-                (sender_wxid == config.WXID and msg_type == "revokemsg")):  # 自己撤回的消息
-            return
-
-        # ========== 获取联系人和发送者信息 ==========
-        # 获取联系人信息
+        # ========== 获取联系人和发送者信息（日志与业务共用） ==========
         contact_name, avatar_url = await _get_contact_info(from_wxid, content, push_content)
-        # 获取发送者信息
         sender_name = await _get_sender_info(from_wxid, sender_wxid, contact_name)
         try:
             await archive_names(msg_id, contact_name, sender_name)
         except Exception as e:
             logger.error(f"更新消息名称失败: {e}")
 
-        # 打印日志过滤掉公众号链接信息
         if not (locale.type(msg_type) == "链接" and from_wxid.startswith('gh_')):
-            # 消息时间
             msg_time = datetime.datetime.fromtimestamp(int(create_time)).strftime("%Y-%m-%d %H:%M:%S")
-            logger.info(f"💬 类型:{locale.type(msg_type)} 时间:{msg_time} 来自:{contact_name}[{from_wxid}] 发送者:{sender_name}[{sender_wxid}] 内容:{content}")
+            preview = format_log_content(msg_type, content, push_content)
+            logger.info(
+                f"收到消息: 类型:{locale.type(msg_type)} 时间:{msg_time} "
+                f"来自:{contact_name}[{from_wxid}] 发送者:{sender_name}[{sender_wxid}] "
+                f"内容:{preview}"
+            )
+
+        # ========== 早期过滤不需要处理的消息 ==========
+        if (from_wxid.endswith('@placeholder_foldgroup') or  # 激活折叠聊天
+                from_wxid == 'notification_messages' or  # 系统通知
+                msg_type in black_list or  # 黑名单类型
+                (sender_wxid == config.WXID and msg_type == "revokemsg")):  # 自己撤回的消息
+            return
 
         if msg_type == 2001 and from_wxid.endswith('@chatroom') and enabled("qhb"):
 
@@ -249,11 +330,6 @@ async def _process_message_async(message_info: Dict[str, Any]) -> None:
             sender_name = f"<blockquote expandable>{sender_name}: </blockquote>"
         else:
             sender_name = ""
-
-        # 调试输出未知类型消息
-        types_keys = [k for k in locale.type_map.keys()]
-        if msg_type not in types_keys:
-            logger.warning(f"💬 类型:{msg_type} 来自:{from_wxid} 发送者:{sender_wxid} 内容:{content}")
 
     except Exception as e:
         logger.error(f"异步消息处理失败: {e}", exc_info=True)

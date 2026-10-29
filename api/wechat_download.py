@@ -11,7 +11,21 @@ from api.wechat_api import wechat_api
 from config import WXID
 
 
-async def get_image(msg_id: str, from_wxid: str, data_json) -> Tuple[bool, str, str]:
+def dated_media_dir(base: str, create_time=None) -> str:
+    """chat_images|chat_videos 下按 YYYY-MM-DD 归类。"""
+    try:
+        ts = int(create_time) if create_time else 0
+        day = (
+            datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+            if ts > 0
+            else datetime.datetime.now().strftime("%Y-%m-%d")
+        )
+    except (TypeError, ValueError, OSError):
+        day = datetime.datetime.now().strftime("%Y-%m-%d")
+    return os.path.join(base, day)
+
+
+async def get_image(msg_id: str, from_wxid: str, data_json, create_time=None) -> Tuple[bool, str, str]:
     return await chunked_download(
         api_path="GET_IMAGE",
         msg_id=msg_id,
@@ -19,11 +33,11 @@ async def get_image(msg_id: str, from_wxid: str, data_json) -> Tuple[bool, str, 
         data_json=data_json,
         file_key="img",
         file_extension="png",
-        save_dir="chat_images"
+        save_dir=dated_media_dir("chat_images", create_time),
     )
 
 
-async def get_video(msg_id: str, from_wxid: str, data_json) -> Tuple[bool, str, str]:
+async def get_video(msg_id: str, from_wxid: str, data_json, create_time=None) -> Tuple[bool, str, str]:
     from config import cfg
     return await chunked_download(
         api_path="GET_VIDEO",
@@ -32,7 +46,7 @@ async def get_video(msg_id: str, from_wxid: str, data_json) -> Tuple[bool, str, 
         data_json=data_json,
         file_key="videomsg",
         file_extension="mp4",
-        save_dir="chat_videos",
+        save_dir=dated_media_dir("chat_videos", create_time),
         max_bytes=cfg.media.max_video_bytes,
     )
 
